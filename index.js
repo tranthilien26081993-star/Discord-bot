@@ -196,7 +196,7 @@ const ANIME_LIST = [
     { name: 'Spike Spiegel', hint: 'Thợ săn tiền thưởng không gian trong Cowboy Bebop' }
 ];
 
-// --- CẤU HÌNH AI "THÔNG MINH NHƯ NGƯỜI THẬT" ---
+// --- CẤU HÌNH AI ---
 const openai = new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: 'https://integrate.api.nvidia.com/v1' });
 const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
 
@@ -226,7 +226,7 @@ async function callNvidiaAI(messages) {
     }
 }
 
-// --- TẠO SLASH COMMANDS ---
+// --- SLASH COMMANDS ---
 const commands = [
     new SlashCommandBuilder().setName('ai').setDescription('Bật/tắt chế độ AI tự động').addSubcommand(sub => sub.setName('on').setDescription('Bật AI')).addSubcommand(sub => sub.setName('off').setDescription('Tắt AI')),
     new SlashCommandBuilder().setName('vi').setDescription('Kiểm tra tiền, cần câu và nông trại'),
@@ -250,7 +250,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     try {
         switch (interaction.commandName) {
-            
             case 'vi': {
                 const embed = createBaseEmbed(
                     0x2B2D31, 
@@ -269,7 +268,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 await interaction.reply({ embeds: [embed] });
                 break;
             }
-
             case 'diandanh': {
                 const cooldown = 24 * 60 * 60 * 1000;
                 const timePassed = Date.now() - eco.lastDaily;
@@ -277,35 +275,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     const hoursLeft = Math.ceil((cooldown - timePassed) / 3600000);
                     return interaction.reply({ embeds: [createBaseEmbed(0xED4245, '⏳ BẠN ĐÃ ĐIỂM DANH RỒI!', `Quay lại sau **${hoursLeft} giờ** nữa để nhận quà tiếp nhé.`, GIFS.daily)], ephemeral: true });
                 }
-                
                 eco.balance += 500;
                 eco.lastDaily = Date.now();
                 eco.streak += 1;
                 saveUserData(userId, eco);
-                
                 await interaction.reply({ embeds: [createBaseEmbed(0x57F287, '🎁 ĐIỂM DANH THÀNH CÔNG', `Bạn nhận được **+500 xu**.\n🔥 Chuỗi hiện tại: **${eco.streak} ngày**!`, GIFS.daily)] });
                 break;
             }
-
             case 'cauca': {
                 let chance = Math.random();
                 let caughtFish;
-                
                 const rodTiers = {
                     'titan':  [{c: 0.05, f: 10}, {c: 0.15, f: 9}, {c: 0.40, f: 8}, {c: 0.70, f: 7}, {c: 1.0, f: 6}],
                     'carbon': [{c: 0.05, f: 9},  {c: 0.20, f: 8}, {c: 0.45, f: 6}, {c: 0.75, f: 5}, {c: 1.0, f: 4}],
                     'tre':    [{c: 0.05, f: 6},  {c: 0.15, f: 4}, {c: 0.40, f: 3}, {c: 0.70, f: 2}, {c: 0.90, f: 1}, {c: 1.0, f: 0}]
                 };
-
                 const currentRodLimits = rodTiers[eco.rod] || rodTiers['tre'];
                 for (let tier of currentRodLimits) {
                     if (chance < tier.c) { caughtFish = FISH_LIST[tier.f]; break; }
                 }
-                
                 eco.fishes.push(caughtFish);
                 eco.balance += caughtFish.price;
                 saveUserData(userId, eco);
-                
                 const isTrash = caughtFish.rarity === 'Trash';
                 const embed = createBaseEmbed(
                     isTrash ? 0x95A5A6 : 0x3498DB, 
@@ -316,10 +307,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 await interaction.reply({ embeds: [embed] });
                 break;
             }
-
             case 'slot': {
                 const bet = interaction.options.getInteger('sotien');
                 if (bet <= 0) return interaction.reply({ content: 'Số tiền cược phải lớn hơn 0 bồ ơi!', ephemeral: true });
                 if (eco.balance < bet) return interaction.reply({ content: `Bạn không đủ tiền! Số dư của bạn là: **${eco.balance} xu**.`, ephemeral: true });
 
-                const symbols = ['🍒', '🍋', '🔔
+                const symbols = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
+                const result = [ symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random(
