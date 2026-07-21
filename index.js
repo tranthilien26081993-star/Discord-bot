@@ -9,7 +9,6 @@ const logger = {
     warn: (obj, msg) => console.warn(JSON.stringify({ level: 'warn', ...((typeof obj === 'string') ? { msg: obj } : { ...obj, msg }) }))
 };
 
-// --- ANIMATION GIFS ---
 const GIFS = {
     wallet: 'https://media.giphy.com/media/3o6gDWzmAzrpi5DQU8/giphy.gif',
     daily: 'https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif',
@@ -21,7 +20,6 @@ const GIFS = {
     ai_off: 'https://media.giphy.com/media/3o7abIqp75vZXa19aU/giphy.gif'
 };
 
-// --- QUẢN LÝ BỘ NHỚ ---
 const aiChannels = new Set();
 const userEconomy = new Map();
 const chatHistories = new Map();
@@ -46,7 +44,6 @@ function createBaseEmbed(color, title, description, imageGif = null, thumbnailGi
     return embed;
 }
 
-// --- DỮ LIỆU GAME ---
 const FISH_LIST = [
     { name: '👢 Chiếc Ủng Rách (Rác)', price: 10, rarity: 'Trash' },
     { name: '🐡 Cá Lóc Đồng', price: 80, rarity: 'Common' },
@@ -61,7 +58,6 @@ const FISH_LIST = [
     { name: '🐉 Rồng Biển Thượng Cổ', price: 50000, rarity: 'Mythic' }
 ];
 
-// --- KHO 100 NHÂN VẬT ANIME CHI TIẾT ---
 const ANIME_LIST = [
     { name: 'Luffy', hint: 'Thuyền trưởng Băng Mũ Rơm có ước mơ trở thành Vua Hải Tặc' },
     { name: 'Zoro', hint: 'Kiếm sĩ phái Tam Kiếm siêu ngầu nhưng cực kỳ mù đường' },
@@ -165,7 +161,6 @@ const ANIME_LIST = [
     { name: 'Spike Spiegel', hint: 'Thợ săn tiền thưởng không gian trong Cowboy Bebop' }
 ];
 
-// --- CẤU HÌNH AI THÔNG MINH NHƯ NGƯỜI THẬT ---
 const openai = new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: 'https://integrate.api.nvidia.com/v1' });
 const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
 
@@ -191,12 +186,10 @@ async function callNvidiaAI(messages) {
         return completion.choices[0]?.message?.content || 'hông biết nói gì luôn á ngơ ngác chít đúm :v';
     } catch (e) {
         logger.warn(e, 'Nvidia AI error');
-        return 'mạng lag quá bợn êi, từ từ hẵng réo :v';
+        return 'mạng lag quá ban êi, từ từ hẵng réo :v';
     }
-}
-
-// --- TẠO SLASH COMMANDS ---
-const commands = [
+        }
+     const commands = [
     new SlashCommandBuilder().setName('ai').setDescription('Bật/tắt chế độ AI tự động').addSubcommand(sub => sub.setName('on').setDescription('Bật AI')).addSubcommand(sub => sub.setName('off').setDescription('Tắt AI')),
     new SlashCommandBuilder().setName('vi').setDescription('Kiểm tra tiền, cần câu và nông trại'),
     new SlashCommandBuilder().setName('diandanh').setDescription('Điểm danh nhận xu hàng ngày'),
@@ -313,4 +306,98 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     )] 
                 });
                 try {
-               
+                    const collected = await interaction.channel.awaitMessages({ filter: m => m.author.id === userId, max: 1, time: 15000, errors: ['time'] });
+                    const answer = collected.first().content.trim().toLowerCase();
+                    if (answer === character.name.toLowerCase()) {
+                        eco.balance += 300; saveUserData(userId, eco);
+                        await interaction.followUp({ content: `🎉 Chuẩn cmnr! Bổn cung thưởng cho bạn **+300 xu**. (Đáp án: **${character.name}**)` });
+                    } else {
+                        await interaction.followUp({ content: `❌ Sai bét rồi! Đáp án đúng là **${character.name}**.` });
+                    }
+                } catch (e) {
+                    await interaction.followUp({ content: `⏰ Hết 15 giây rồi! Đáp án là **${character.name}**.` });
+                }
+                break;
+            }
+            case 'nongtrai': {
+                const sub = interaction.options.getSubcommand();
+                if (sub === 'vuon') {
+                    let desc = '';
+                    eco.plots.forEach((plot, index) => {
+                        if (!plot) desc += `**Ô ${index + 1}:** Đất trống (Vào shop mua hạt giống)\n`;
+                        else {
+                            const timeToGrow = (plot.plantTime + plot.duration) - Date.now();
+                            if (timeToGrow <= 0) desc += `**Ô ${index + 1}:** ${plot.name} (Đã chín! Gõ /nongtrai thuhoach)\n`;
+                            else desc += `**Ô ${index + 1}:** ${plot.name} (Chín sau: ${Math.ceil(timeToGrow / 60000)} phút)\n`;
+                        }
+                    });
+                    await interaction.reply({ embeds: [createBaseEmbed(0x2ECC71, '🧑‍🌾 KHU VƯỜN CỦA BẠN', desc, GIFS.farm)] });
+                } else if (sub === 'thuhoach') {
+                    const plotIndex = interaction.options.getInteger('oodat') - 1; 
+                    if (plotIndex < 0 || plotIndex >= eco.plots.length) return interaction.reply({ content: 'Ô đất không tồn tại!', ephemeral: true });
+                    const plot = eco.plots[plotIndex];
+                    if (!plot) return interaction.reply({ content: 'Ô này đang bỏ hoang!', ephemeral: true });
+                    if (Date.now() < plot.plantTime + plot.duration) return interaction.reply({ content: 'Cây chưa chín bồ ơi, định ăn trái non à?', ephemeral: true });
+                    
+                    eco.balance += plot.profit;
+                    const profitText = plot.profit;
+                    const plantName = plot.name;
+                    eco.plots[plotIndex] = null; 
+                    saveUserData(userId, eco);
+                    await interaction.reply({ embeds: [createBaseEmbed(0xF1C40F, '🌾 THU HOẠCH THÀNH CÔNG', `Bạn thu hoạch **${plantName}** và bán vội được **+${profitText.toLocaleString()} xu**!`, GIFS.farm)] });
+                }
+                break;
+            }
+            case 'ai': {
+                if (interaction.options.getSubcommand() === 'on') {
+                    enableChannel(interaction.channelId);
+                    await interaction.reply({ embeds: [createBaseEmbed(0x57F287, '🤖 AI ONLINE', 'Đã bật AI mỏ hỗn lầy lội. Sẵn sàng trò chuyện!', GIFS.ai_on)] });
+                } else {
+                    disableChannel(interaction.channelId);
+                    await interaction.reply({ embeds: [createBaseEmbed(0xED4245, '💤 AI OFFLINE', 'Đã tắt AI và dọn dẹp bộ nhớ tạm.', GIFS.ai_off)] });
+                }
+                break;
+            }
+        }
+    } catch (e) {
+        logger.warn(e, `Lỗi lệnh ${interaction.commandName}`);
+        if (!interaction.replied) await interaction.reply({ content: 'Oops, hệ thống gặp chút sự cố nhỏ!', ephemeral: true });
+    }
+});
+                client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot) return;
+    if (isChannelEnabled(message.channelId)) {
+        await message.channel.sendTyping();
+        if (!chatHistories.has(message.channelId)) chatHistories.set(message.channelId, []);
+        const history = chatHistories.get(message.channelId);
+        history.push({ role: 'user', content: `[Thành viên: ${message.author.username}] nói: ${message.content}` });
+        if (history.length > 8) history.shift();
+        const reply = await callNvidiaAI(history);
+        history.push({ role: 'assistant', content: reply });
+        if (history.length > 8) history.shift();
+        await message.reply(reply);
+    }
+});
+
+client.once('ready', async () => {
+    console.log(`🤖 Bot Discord Thông Minh [${client.user.tag}] đã online!`);
+    client.user.setActivity('chat cùng bạn (/ai on)', { type: 3 }); 
+
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+    try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('✅ Đã nạp thành công bộ lệnh Slash Commands & 100 Anime!');
+    } catch (e) {
+        console.error('❌ Lỗi nạp lệnh:', e);
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot Discord is running successfully!');
+}).listen(PORT, () => {
+    console.log(`🌐 Server HTTP đang chạy trên port ${PORT}`);
+});
+
+client.login(process.env.DISCORD_BOT_TOKEN);
