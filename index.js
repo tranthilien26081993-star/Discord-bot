@@ -1,193 +1,369 @@
-const { Client, GatewayIntentBits, Partials, REST, Routes, Events } = require('discord.js');
-const OpenAI = require('openai');
-const http = require('http');
+import {
+    Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder,
+    EmbedBuilder, Partials, Events
+} from 'discord.js';
+import OpenAI from 'openai';
 
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ],
-    partials: [Partials.Channel, Partials.Message]
-});
-
-const openai = new OpenAI({
-    apiKey: process.env.NVIDIA_API_KEY,
-    baseURL: 'https://integrate.api.nvidia.com/v1'
-});
-const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
-
-const SYSTEM_PROMPT = `bạn là một thành viên gen z lầy lội, cực kỳ thông minh và có cá tính mạnh trong server discord này.
-quy tắc vàng để chat hết như người thật:
-1. tuyệt đối không bao giờ nói "tôi là ai", "tôi là mô hình ngôn ngữ", "tôi là trợ lý".
-2. tông giọng: gen z vui vẻ, hài hước, mỉa mai nhẹ nhàng, biết giận, biết đùa, cực kỳ tự nhiên.
-3. cách xưng hô: dùng tui - ông/bà, tao - mày, bro, tớ - cậu.
-4. cách viết: viết chữ thường hoàn toàn, không viết hoa đầu câu, không xài dấu chấm cuối dòng.
-5. từ lóng gen z discord: đỉnh chương, xỉu, chê, cứu, bro, ét o ét, ảo thật đấy, cay thế nhỉ, mơ đi cưng, vãi.
-6. độ dài: ngắn gọn từ 1 - 3 câu chuẩn chat discord.`;
-
-const MEDIA = {
-    wallet: 'https://media.giphy.com/media/3o6DGwAzAzrPi5DQ8/giphy.gif',
-    daily: 'https://media.giphy.com/media/26tp1GNJN0xLybiU/giphy.gif',
-    fishing: 'https://media.giphy.com/media/3498DB/giphy.gif',
-    slot: 'https://media.giphy.com/media/0xF1C40F/0xC05A5A0/giphy.gif',
-    trailerVideo: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    farm: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800',
-    ai_on: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800',
-    ai_off: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'
+const logger = {
+    warn: (obj, msg) => console.warn(JSON.stringify({ level: 'warn', ...((typeof obj === 'string') ? { msg: obj } : { ...obj, msg }) }))
 };
 
-const FISH_LIST = [
-    { name: 'chiếc ủng rách (rác)', price: 10, rarity: 'trash' },
-    { name: 'cá lóc đồng', price: 80, rarity: 'common' },
-    { name: 'cá rô phi', price: 120, rarity: 'common' },
-    { name: 'mực ống tươi', price: 200, rarity: 'uncommon' },
-    { name: 'cá chép vàng', price: 350, rarity: 'uncommon' },
-    { name: 'cá hồi bơi ngược', price: 600, rarity: 'rare' },
-    { name: 'cá mập con', price: 1500, rarity: 'rare' },
-    { name: 'rùa biển khổng lồ', price: 2500, rarity: 'epic' },
-    { name: 'thủy quái kraken', price: 6000, rarity: 'epic' },
-    { name: 'cá voi xanh huyền thoại', price: 15000, rarity: 'legendary' },
-    { name: 'rồng biển thượng cổ', price: 50000, rarity: 'mythic' }
-];
+// --- ANIMATION GIFS ---
+const GIFS = {
+    wallet: 'https://media.giphy.com/media/3o6gDWzmAzrpi5DQU8/giphy.gif',
+    daily: 'https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif',
+    fishing: 'https://media.giphy.com/media/3o7TKSx0g723R02q3e/giphy.gif',
+    slot: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHp1bng1NW0ycjN5OWo5b3ZkY3J6cHFoYmV1NXV5NXdneWczNmtuaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26ufcVAp3AIJJsrIk/giphy.gif',
+    anime: 'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif',
+    farm: 'https://media.giphy.com/media/l0HlHFRbmaZtBRhXG/giphy.gif',
+    ai_on: 'https://media.giphy.com/media/3o7abK294kG6znhq7O/giphy.gif',
+    ai_off: 'https://media.giphy.com/media/3o7abIqp75vZXa19aU/giphy.gif'
+};
 
-const ANIME_LIST = [
-    { name: 'luffy', display: 'Monkey D. Luffy', hint: 'thuyền trưởng mũ rơm ước mơ làm vua hải tặc', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'zoro', display: 'Roronoa Zoro', hint: 'kiếm sĩ 3 dao cực ngầu nhưng mù đường', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'sanji', display: 'Vinsmoke Sanji', hint: 'đầu bếp tóc vàng thích đá lửa', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'nami', display: 'Nami', hint: 'hoa tiêu cuồng tiền và cam ngọt', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'robin', display: 'Nico Robin', hint: 'nhà khảo cổ học sức mạnh hoa tay', image: 'https://images.unsplash.com/photo-1618336755394-aaede0d5060a?w=800' },
-    { name: 'chopper', display: 'Tony Tony Chopper', hint: 'bác sĩ tuần lộc đáng yêu của nhóm', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'usopp', display: 'Usopp', hint: 'xạ thủ thánh nổ của băng hải tặc', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'franky', display: 'Franky', hint: 'thợ đóng tàu người máy hệ super', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'brook', display: 'Brook', hint: 'nhạc công bộ xương thích đùa sọ người', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'jinbe', display: 'Jinbe', hint: 'cựu thất vũ hải võ thuật ngư nhân', image: 'https://images.unsplash.com/photo-1612872087720-bb876e267d17?w=800' },
-    { name: 'naruto', display: 'Naruto Uzumaki', hint: 'ninja thích ăn ramen ước mơ làm hokage', image: 'https://images.unsplash.com/photo-1618336755394-aaede0d5060a?w=800' },
-    { name: 'sasuke', display: 'Sasuke Uchiha', hint: 'thiếu gia tộc uchiha mang sharingan', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'kakashi', display: 'Kakashi Hatake', hint: 'ninja sao chép đeo khâu trang', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'sakura', display: 'Sakura Haruno', hint: 'nữ ninja y thuật sức mạnh khủng khiếp', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'hinata', display: 'Hinata Hyuga', hint: 'công chúa bạch nhãn thẹn thùng', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'goku', display: 'Son Goku', hint: 'chiến binh saiyan ham ăn khỏe nhất vũ trụ', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'vegeta', display: 'Vegeta', hint: 'hoàng tử kiêu hãnh của hành tinh saiyan', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'gohan', display: 'Son Gohan', hint: 'con trai goku tiềm năng sức mạnh siêu cấp', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'piccolo', display: 'Piccolo', hint: 'chiến binh namek màu xanh thông thái', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'frieza', display: 'Frieza', hint: 'đại vương fize ác ma vũ trụ', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'tanjiro', display: 'Tanjiro Kamado', hint: 'thợ săn quỷ có vết sẹo và trán thép', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'nezuko', display: 'Nezuko Kamado', hint: 'em gái hóa quỷ ngậm ống tre', image: 'https://images.unsplash.com/photo-1618336755394-aaede0d5060a?w=800' },
-    { name: 'zenitsu', display: 'Zenitsu Agatsuma', hint: 'thánh khóc nhè ngủ gục tung hỏa lôi', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'inosuke', display: 'Inosuke Hashibira', hint: 'thanh niên đeo mặt nạ lợn rừng cởi trần', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'tengen', display: 'Tengu Uzui', hint: 'âm trụ hào nhoáng mèng đét', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'rengoku', display: 'Kyojuro Rengoku', hint: 'viêm trụ hào sảng ăn cơm ngon miệng', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'giyu', display: 'Giyu Tomioka', hint: 'thủy trụ trầm tính hay bị ghét', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'shinobu', display: 'Shinobu Kocho', hint: 'trùng trụ bướm độc châm chích', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'muzan', display: 'Muzan Kibutsuji', hint: 'chúa quỷ chúa tể michael jackson', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'akaza', display: 'Akaza', hint: 'thượng huyền tam võ thuật cận chiến', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'gojo', display: 'Gojo Satoru', hint: 'thầy giáo mạnh nhất mắt đẹp vô hạn', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'sukuna', display: 'Ryomen Sukuna', hint: 'vua nguyền rủa hai mặt hiểm độc', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'yuji', display: 'Yuji Itadori', hint: 'nam thần nguyền rủa nuốt ngón tay', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'megumi', display: 'Megumi Fushiguro', hint: 'triệu hồi sư bóng tối thỏ sói', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'nobara', display: 'Nobara Kugisaki', hint: 'nữ chiến binh búa đinh cá tính', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'saitama', display: 'Saitama', hint: 'thánh trọc đấm một phát chết luôn', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'genos', display: 'Genos', hint: 'cyborg hiện đại đệ tử thánh trọc', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'tatsumaki', display: 'Tatsumaki', hint: 'cô nàng loli siêu năng lực khủng', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'garou', display: 'Garou', hint: 'thợ săn anh hùng hóa quái vật', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'bofoi', display: 'Metal Knight', hint: 'hiệp sĩ sắt máy móc', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'eren', display: 'Eren Yeager', hint: 'thanh niên diệt thế sát thủ khổng lồ', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'mikasa', display: 'Mikasa Ackerman', hint: 'nữ thần chiến binh bảo vệ eren', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'levi', display: 'Levi Ackerman', hint: 'đội trưởng lùn mạnh nhất nhân loại sạch sẽ', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'armin', display: 'Armin Arlert', hint: 'quân sư thông minh óc chiến thuật', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'erwin', display: 'Erwin Smith', hint: 'đại tướng quân đoàn trinh sát dũng cảm', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'light', display: 'Light Yagami', hint: 'kira sở hữu cuốn sổ tử thần death note', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'l', display: 'L Lawliet', hint: 'thám tử thiên tài thích ăn kẹo ngồi xổm', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'misa', display: 'Misa Amane', hint: 'người mẫu hâm mộ kira tột độ', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'ryuk', display: 'Ryuk', hint: 'thần chết thích ăn táo', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'near', display: 'Near', hint: 'thám tử nhí chơi đồ chơi', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'senku', display: 'Senku Ishigami', hint: 'thần đồng khoa học 10 tỷ phần trăm', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'taiju', display: 'Taiju Oki', hint: 'anh chàng cơ bắp sức trâu', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'kohaku', display: 'Kohaku', hint: 'cô nàng thợ săn hoang dã', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'chrome', display: 'Chrome', hint: 'pháp sư khoa học tập sự', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'tsukasa', display: 'Tsukasa Shishio', hint: 'linh trưởng mạnh nhất thời đồ đá', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'asta', display: 'Asta', hint: 'thanh niên không ma lực kiếm phản ma', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'yuno', display: 'Yuno Grinberryall', hint: 'thiên tài ma pháp cỏ bốn lá', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'noelle', display: 'Noelle Silva', hint: 'công chúa nước tsundere', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'yami', display: 'Yami Sukehiro', hint: 'đội trưởng hắc ngưu thích đi vệ sinh', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'julius', display: 'Julius Novachrono', hint: 'vua ma pháp cuồng phép thuật', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'kaneki', display: 'Ken Kaneki', hint: 'bán ngạ quỷ tóc trắng mắt kính', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'touka', display: 'Touka Kirishima', hint: 'thỏ ngạ quỷ tiệm cà phê anteiku', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'juuzou', display: 'Juuzou Suzuya', hint: 'thanh tra đặc biệt phong cách khâu vá', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'arima', display: 'Kishou Arima', hint: 'tử thần ccg huyền thoại', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'utahime', display: 'Uta', hint: 'thợ làm mặt nạ cá tính', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'kirito', display: 'Kirito', hint: 'hắc kiếm sĩ sao kazuto sao chép', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'asuna', display: 'Asuna Yuuki', hint: 'tia chớp tiểu thư kiếm sĩ giỏi nấu ăn', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'sinon', display: 'Sinon', hint: 'xạ thủ ảo ảnh ggo', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'leafa', display: 'Leafa', hint: 'em gái tiên phong lướt gió', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'alice', display: 'Alice Synthesis', hint: 'hiệp sĩ thanh liêm vàng rực', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'subaru', display: 'Natsuki Subaru', hint: 'chàng trai chết đi sống lại dị giới', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'rem', display: 'Rem', hint: 'cô hầu gái tóc xanh quốc dân', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'ram', display: 'Ram', hint: 'cô hầu gái tóc hồng sắc sảo', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'emilia', display: 'Emilia', hint: 'tiên nữ tóc bạc nửa yêu tinh', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'beatrice', display: 'Beatrice', hint: 'thủ thư loli tiểu tinh linh', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'anya', display: 'Anya Forger', hint: 'cô bé đọc suy nghĩ thích ăn đậu phộng', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'loid', display: 'Loid Forger', hint: 'điệp viên twilight bố giả vờ', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'yor', display: 'Yor Forger', hint: 'sát thủ công chúa gai mẹ nuôi', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'bond', display: 'Bond Forger', hint: 'chó tiên tri tương lai gia đình forger', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'damian', display: 'Damian Desmond', hint: 'công tử quý tộc trường eden', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'bocchi', display: 'Hitori Gotoh', hint: 'cô bé ghita hướng nội sợ xã hội', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'nijika', display: 'Nijika Ijichi', hint: 'trưởng nhóm nhạc năng động tóc vàng', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'ryo', display: 'Ryo Yamada', hint: 'tay bass kỳ quặc thích ăn rau', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'kita', display: 'Ikuyo Kita', hint: 'cô nàng hướng ngoại rực rỡ', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'nijima', display: 'Nijima', hint: 'nhân vật phụ huyền thoại', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'shinji', display: 'Shinji Ikari', hint: 'phi công eva thảm họa tâm lý', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'rei', display: 'Rei Ayanami', hint: 'thiếu nữ tóc xanh băng lãnh', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'asuka', display: 'Asuka Langley', hint: 'tiểu thư đỏng đảnh lái eva 02', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'kaworu', display: 'Kaworu Nagisa', hint: 'thiên sứ cuối cùng thân thiện', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'misato', display: 'Misato Katsuragi', hint: 'nữ sĩ quan giám hộ thích uống bia', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'denji', display: 'Denji', hint: 'thanh niên cưa máy số nhọ', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'pochita', display: 'Pochita', hint: 'quỷ cưa màu cam đáng yêu', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' },
-    { name: 'makima', display: 'Makima', hint: 'cô nàng quyền lực chi phối', image: 'https://images.unsplash.com/photo-157863277115-351597cf2477?w=800' },
-    { name: 'power', display: 'Power', hint: 'ác ma máu ngổ ngáo', image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800' },
-    { name: 'aki', display: 'Aki Hayakawa', hint: 'chàng trai hợp đồng quỷ hồ ly', image: 'https://images.unsplash.com/photo-1534476777684-436bb094017w=800' },
-    { name: 'kaguya', display: 'Kaguya Shinomiya', hint: 'nữ tiểu thư tài phiệt tsundere', image: 'https://images.unsplash.com/photo-1518709268805-4e9042a9f233?w=800' },
-    { name: 'miyuki', display: 'Miyuki Shirogane', hint: 'hội trưởng hội học sinh chăm chỉ', image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800' },
-    { name: 'chika', display: 'Chika Fujiwara', hint: 'cô nàng thư ký thích nhảy múa', image: 'https://images.unsplash.com/photo-1563080145-509097674d27?w=800' },
-    { name: 'yuu', display: 'Yuu Ishigami', hint: 'thủ quỹ u sầu game thủ', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-    { name: 'miko', display: 'Miko Iino', hint: 'nữ ủy viên kỷ luật nghiêm ngặt', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' }
-];
-
-const userEconomy = new Map();
+// --- QUẢN LÝ BỘ NHỚ ---
 const aiChannels = new Set();
+const userEconomy = new Map();
 const chatHistories = new Map();
+
+function enableChannel(channelId) { aiChannels.add(channelId); }
+function disableChannel(channelId) { aiChannels.delete(channelId); chatHistories.delete(channelId); }
+function isChannelEnabled(channelId) { return aiChannels.has(channelId); }
 
 function getUserData(userId) {
     if (!userEconomy.has(userId)) {
-        userEconomy.set(userId, {
-            balance: 1000,
-            lastDaily: 0,
-            plots: [null, null, null, null],
-            fishes: [],
-            rod: 'tre',
-            streak: 0
-        });
+        userEconomy.set(userId, { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null], rod: 'tre', fishes: [] });
     }
     return userEconomy.get(userId);
 }
 
-function saveUserData(userId, data) {
-    userEconomy.set(userId, data);
-}
+function saveUserData(userId, data) { userEconomy.set(userId, data); }
 
-function createBaseEmbed(color, title, description, imageMedia = null) {
-    const embed = { color, title, description, timestamp: new Date().toISOString() };
-    if (imageMedia) embed.image = { url: imageMedia };
+function createBaseEmbed(color, title, description, imageGif = null, thumbnailGif = null) {
+    const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setTimestamp();
+    if (imageGif) embed.setImage(imageGif);
+    if (thumbnailGif) embed.setThumbnail(thumbnailGif);
     return embed;
 }
+
+// --- DỮ LIỆU GAME ---
+const ALL_SEEDS = [
+    { id: 'lua', name: '🌾 Lúa Nước Hạt Vàng', rarity: 'Common', cost: 100, profit: 250, duration: 3 * 60 * 1000 },
+    { id: 'carot', name: '🥕 Củ Rốt Thường', rarity: 'Common', cost: 200, profit: 450, duration: 5 * 60 * 1000 },
+    { id: 'bapcas', name: '🌽 Bắp Cải Xanh', rarity: 'Common', cost: 350, profit: 750, duration: 8 * 60 * 1000 },
+    { id: 'khoai', name: '🍠 Khoai Lang Tím', rarity: 'Uncommon', cost: 450, profit: 1000, duration: 10 * 60 * 1000 },
+    { id: 'dautay', name: '🍓 Dâu Tây Ngọt', rarity: 'Uncommon', cost: 600, profit: 1300, duration: 15 * 60 * 1000 },
+    { id: 'cachua', name: '🍅 Cà Chua Mọng Nước', rarity: 'Rare', cost: 900, profit: 2000, duration: 20 * 60 * 1000 },
+    { id: 'nho', name: '🍇 Nho Xanh Trĩu Quả', rarity: 'Rare', cost: 1200, profit: 2800, duration: 25 * 60 * 1000 },
+    { id: 'saurieng', name: '🍈 Sầu Riêng Ngọt Lịm', rarity: 'Epic', cost: 3000, profit: 8000, duration: 45 * 60 * 1000 },
+    { id: 'hoatran', name: '✨ Hoa Trắng Sao Huyền Thoại', rarity: 'Legendary', cost: 8000, profit: 22000, duration: 120 * 60 * 1000 },
+    { id: 'nhansam', name: '🌿 Nhân Sâm Ngàn Năm', rarity: 'Legendary', cost: 15000, profit: 45000, duration: 180 * 60 * 1000 },
+    { id: 'acquy', name: '🔥 Quả Ác Quỷ Thần Bí', rarity: 'Mythic', cost: 40000, profit: 150000, duration: 300 * 60 * 1000 }
+];
+
+const FISH_LIST = [
+    { name: '👢 Chiếc Ủng Rách (Rác)', price: 10, rarity: 'Trash' },
+    { name: '🐡 Cá Lóc Đồng', price: 80, rarity: 'Common' },
+    { name: '🐟 Cá Rô Phi', price: 120, rarity: 'Common' },
+    { name: '🦑 Mực Ống Tươi', price: 200, rarity: 'Common' },
+    { name: '🐠 Cá Chép Vàng', price: 350, rarity: 'Uncommon' },
+    { name: '🍣 Cá Hồi Bơi Ngược', price: 600, rarity: 'Uncommon' },
+    { name: '🦈 Cá Mập Con', price: 1500, rarity: 'Rare' },
+    { name: '🐢 Rùa Biển Khổng Lồ', price: 2500, rarity: 'Rare' },
+    { name: '🐙 Thủy Quái Kraken', price: 6000, rarity: 'Epic' },
+    { name: '🐋 Cá Voi Xanh Huyền Thoại', price: 15000, rarity: 'Legendary' },
+    { name: '🐉 Rồng Biển Thượng Cổ', price: 50000, rarity: 'Mythic' }
+];
+
+// --- KHO 100 NHÂN VẬT ANIME CHI TIẾT ---
+const ANIME_LIST = [
+    // ONE PIECE
+    { name: 'Luffy', hint: 'Thuyền trưởng Băng Mũ Rơm có ước mơ trở thành Vua Hải Tặc' },
+    { name: 'Zoro', hint: 'Kiếm sĩ phái Tam Kiếm siêu ngầu nhưng cực kỳ mù đường' },
+    { name: 'Sanji', hint: 'Đầu bếp mê gái mê đấm bằng chân, thuộc Băng Mũ Rơm' },
+    { name: 'Nami', hint: 'Hoa tiêu cuồng tiền và cam ngọt của Băng Mũ Rơm' },
+    { name: 'Robin', hint: 'Nhà khảo cổ học sở hữu sức mạnh Trái Ác Quỷ Hana Hana no Mi' },
+    { name: 'Chopper', hint: 'Bác sĩ tuần lộc đáng yêu ăn trái Hito Hito no Mi' },
+    { name: 'Usopp', hint: 'Thánh nói dóc kiêm xạ thủ thần ba hoa của nhóm Mũ Rơm' },
+    { name: 'Ace', hint: 'Anh trai Luffy sở hữu Trái Hỏa Quyền Mera Mera no Mi' },
+    { name: 'Sabo', hint: 'Tổng tham mưu trưởng Quân Cách Mạng, anh em kết nghĩa của Luffy' },
+    { name: 'Shanks', hint: 'Hải tặc Tóc Đỏ đã truyền cảm hứng và trao chiếc mũ rơm cho Luffy' },
+
+    // NARUTO
+    { name: 'Naruto', hint: 'Hồ ly chín đuôi Ninja thích ăn ramen Ichiraku, ước mơ làm Hokage' },
+    { name: 'Sasuke', hint: 'Tộc nhân Uchiha sở hữu Sharingan và ước mơ trả thù anh trai' },
+    { name: 'Kakashi', hint: 'Ninja sao chép luôn đeo khẩu trang và đọc sách Thiên Đường Tung Tăng' },
+    { name: 'Itachi', hint: 'Thiên tài tộc Uchiha hy sinh cả tộc vì hòa bình Làng Lá' },
+    { name: 'Jiraiya', hint: 'Nhân giả hiền nhân thích do thám phòng tắm nữ, thầy của Naruto' },
+    { name: 'Hinata', hint: 'Cô gái tộc Hyuga thầm yêu Naruto từ nhỏ, sở hữu Byakugan' },
+    { name: 'Gaara', hint: 'Nhất Vĩ Kazekage làng Cát có chữ Ái trên trán' },
+    { name: 'Minato', hint: 'Tia Chớp Vàng Làng Lá, Hokage Đệ Tứ và là cha của Naruto' },
+    { name: 'Madara', hint: 'Huyền thoại tộc Uchiha kích hoạt Kế hoạch Nguyệt Nhãn' },
+    { name: 'Obito', hint: 'Kẻ đeo mặt nạ Tobi đứng sau tổ chức Akatsuki' },
+
+    // JUJUTSU KAISEN
+    { name: 'Gojo Satoru', hint: 'Thầy giáo bịt mắt mạnh nhất với Kỹ năng Vô Hạn và Tử' },
+    { name: 'Yuji Itadori', hint: 'Cậu học sinh trung học nuốt ngón tay của Vua Nguyền Hồn' },
+    { name: 'Megumi Fushiguro', hint: 'Chú thuật sư triệu hồi Thập Chủng Thần Hình Graph' },
+    { name: 'Nobara Kugisaki', hint: 'Cô gái cá tính sử dụng đinh và búa để diệt nguyền hồn' },
+    { name: 'Sukuna', hint: 'Vua Nguyền Hồn ngự trị trong cơ thể Yuji' },
+    { name: 'Kento Nanami', hint: 'Chú thuật sư từng làm dân văn phòng với chiêu Bảy Ba' },
+    { name: 'Toji Fushiguro', hint: 'Thánh Thiên Dữ Chú Lực, cha của Megumi' },
+    { name: 'Yuta Okkotsu', hint: 'Chú thuật sư đặc cấp có Rika bảo vệ' },
+    { name: 'Maki Zenin', hint: 'Cô gái tộc Zenin không có chú lực nhưng sử dụng chú cụ cực giỏi' },
+    { name: 'Suguru Geto', hint: 'Bạn thân cũ của Gojo, chú thuật sư thu phục nguyền hồn' },
+
+    // DEMON SLAYER
+    { name: 'Tanjiro', hint: 'Cậu bé đeo bông tai Hơi Thở Của Mặt Trời đi tìm thuốc chữa cho em' },
+    { name: 'Nezuko', hint: 'Em gái ngậm ống tre dễ thương hóa quỷ chiến đấu cực ngầu' },
+    { name: 'Zenitsu', hint: 'Sợ chết nhưng khi ngủ gật hóa thần Hơi Thở Của Sét' },
+    { name: 'Inosuke', hint: 'Đầu heo rừng thích đấm nhau dùng Hơi Thở Của Quái Thú' },
+    { name: 'Rengoku', hint: 'Viêm Trụ nhiệt huyết như ngọn lửa cháy rực' },
+    { name: 'Giyu', hint: 'Thủy Trụ đơ đơ ít nói "tôi không bị ai ghét cả"' },
+    { name: 'Shinobu', hint: 'Trùng Trụ nụ cười dịu dàng chuyên dùng độc diệt quỷ' },
+    { name: 'Tengen', hint: 'Âm Trụ hào hoa sở hữu 3 cô vợ ninja' },
+    { name: 'Akaza', hint: 'Thượng Huyền Tam võ thuật đỉnh cao trong Thanh Gươm Diệt Quỷ' },
+    { name: 'Muzan', hint: 'Chúa tể quỷ nguyên thủy giống Michael Jackson' },
+
+    // ATTACK ON TITAN
+    { name: 'Eren', hint: 'Thần tượng tự do, biến thành Titan Tiến Công san bằng thế giới' },
+    { name: 'Mikasa', hint: 'Cô gái tộc Ackerman cuồng bảo vệ Eren' },
+    { name: 'Armin', hint: 'Bộ óc chiến thuật thiên tài của Trinh Sát Đoàn, Titan Đại Hình' },
+    { name: 'Levi', hint: 'Chiến thần lùn tịt mạnh nhất nhân loại cuồng sạch sẽ' },
+    { name: 'Erwin', hint: 'Đội trưởng Trinh Sát Đoàn với tiếng hô "Shinzo wo Sasageyo"' },
+    { name: 'Reiner', hint: 'Titan Thiết Giáp muốn làm người hùng nhưng dằn dặt tâm lý' },
+    { name: 'Zeke', hint: 'Titan Quái Thú có khả năng chọi đá thần tốc, anh cùng cha khác mẹ của Eren' },
+    { name: 'Sasha', hint: 'Cô gái khoai tây mê ăn uống của Trinh Sát Đoàn' },
+    { name: 'Hange', hint: 'Nhà nghiên cứu Titan điên rồ và nhiệt huyết' },
+    { name: 'Historia', hint: 'Nữ hoàng thật sự của bức tường Paradis' },
+
+    // DRAGON BALL & ONE PUNCH MAN
+    { name: 'Goku', hint: 'Khỉ con Saiyan thích đánh nhau nâng cấp Ultra Instinct' },
+    { name: 'Vegeta', hint: 'Hoàng tử Saiyan kiêu hãnh cuồng tập luyện vượt Goku' },
+    { name: 'Gohan', hint: 'Con trai Goku bộc phát sức mạnh hóa Super Saiyan 2 diệt Cell' },
+    { name: 'Trunks', hint: 'Kiếm sĩ từ tương lai trở về dặn dò Goku' },
+    { name: 'Piccolo', hint: 'Người Namek từng là kẻ thù nhưng trở thành bảo mẫu nhà Goku' },
+    { name: 'Beerus', hint: 'Thần Hủy Diệt cuồng ăn đồ ăn Trái Đất' },
+    { name: 'Saitama', hint: 'Thánh Phồng đấm phát chết luôn, trọc đầu do tập luyện' },
+    { name: 'Genos', hint: 'Cyborg hiện đại đệ tử ruột của Saitama' },
+    { name: 'Tatsumaki', hint: 'Đứa Con Của Bão Siêu Năng Lực lùn tịt cá tính' },
+    { name: 'Garou', hint: 'Quái vật nhân tạo hunted các anh hùng' },
+
+    // HUNTER X HUNTER & BLEACH
+    { name: 'Gon', hint: 'Cậu bé câu cá đi tìm cha trở thành Hunter' },
+    { name: 'Killua', hint: 'Sát thủ nhí tộc Zoldyck biến niệm thành dòng điện' },
+    { name: 'Kurapika', hint: 'Tộc nhân Kurta mắt đỏ dùng xích diệt Băng Nhện' },
+    { name: 'Hisoka', hint: 'Tên hề biến thái cuồng đánh nhau với quả bong bóng Bungee' },
+    { name: 'Chrollo', hint: 'Bang chủ Băng Nhện Bang Ryodan đánh cắp niệm' },
+    { name: 'Ichigo', hint: 'Tóc cam đại diện tử thần thay thế với thanh Zangetsu' },
+    { name: 'Rukia', hint: 'Nữ tử thần trao sức mạnh cho Ichigo' },
+    { name: 'Aizen', hint: 'Kẻ phản diện thích tháo kính vuốt tóc tạo phản Thi魂Giới' },
+    { name: 'Byakuya', hint: 'Đội trưởng đội 6 tộc trưởng Kuchiki sở hữu Senbonzakura' },
+    { name: 'Kisuke', hint: 'Ông chủ tiệm ch chít mang dép cao su đội nón sọc' },
+
+    // SPY X FAMILY & CHAINSAW MAN
+    { name: 'Anya', hint: 'Bé gái đọc suy nghĩ siêu ngố thích ăn đậu phụng "Waku Waku"' },
+    { name: 'Loid', hint: 'Điệp viên Twilight làm người cha mẫu mực' },
+    { name: 'Yor', hint: 'Nữ sát thủ Công chúa Gai làm người mẹ đảm đang' },
+    { name: 'Denji', hint: 'Thợ săn quỷ nghèo khổ ước mơ biến thành Quỷ Cưa' },
+    { name: 'Power', hint: 'Quỷ máu ngạo mạn, bạn thân của Denji' },
+    { name: 'Makima', hint: 'Sĩ quan cấp cao Quỷ Chi phối xinh đẹp nhưng đáng sợ' },
+    { name: 'Aki', hint: 'Thợ săn quỷ sử dụng Quỷ Cáo và Quỷ Lời Nguyền' },
+    { name: 'Reze', hint: 'Cô gái Quỷ Bom Bom gieo tương tư cho Denji' },
+    { name: 'Pochita', hint: 'Quỷ Cưa đáng yêu biến thành trái tim của Denji' },
+    { name: 'Kobeni', hint: 'Nữ thợ săn quỷ hay khóc nhè nhưng nhảy Dance Dance cực đỉnh' },
+
+    // ANIME KINH ĐIỂN VÀ ISEKAI
+    { name: 'Light Yagami', hint: 'Học sinh thiên tài sở hữu Cuốn Sổ Tử Thần Death Note' },
+    { name: 'L', hint: 'Thám tử thiên tài cuồng ăn đồ ngọt dáng ngồi khom lưng' },
+    { name: 'Ryuk', hint: 'Thần chết cuồng ăn táo đỏ' },
+    { name: 'Edward Elric', hint: 'Giả kim thuật sư tóc vàng lùn tịt tìm Đá Triết Gia' },
+    { name: 'Alphonse', hint: 'Em trai Edward mang linh hồn nhập vào bộ giáp sắt' },
+    { name: 'Roy Mustang', hint: 'Giả kim thuật sư Ngọn Lửa búng tay ra lửa' },
+    { name: 'Lelouch', hint: 'Hoàng tử Britannia sở hữu con mắt Geass ra lệnh tuyệt đối' },
+    { name: 'C.C.', hint: 'Cô gái bất tử mê ăn pizza đồng hành cùng Lelouch' },
+    { name: 'Kirito', hint: 'Hắc Kiếm Sĩ độc hành trong Sword Art Online' },
+    { name: 'Asuna', hint: 'Nữ kiếm sĩ chớp nhoáng Phó hội trưởng Huyết Tộc Liên Minh' },
+    { name: 'Subaru', hint: 'Thánh chịu đựng có khả năng Chết Đi Sống Lại trong Re:Zero' },
+    { name: 'Emilia', hint: 'Bán Bán Tinh Linh tóc bạc đáng yêu Subaru liều mạng bảo vệ' },
+    { name: 'Rem', hint: 'Hầu gái quỷ tóc xanh "Tóc xanh chân thành"' },
+    { name: 'Kazuma', hint: 'Thánh bựa Isekai chuyên dùng chiêu Steal' },
+    { name: 'Aqua', hint: 'Nữ thần nước vô dụng phế vật khóc nhè' },
+    { name: 'Megumin', hint: 'Pháp sư Bão Tố cuồng phép Explosion' },
+    { name: 'Rimuru', hint: 'Slime ma vương bá đạo bá chủ rừng Jura' },
+    { name: 'Mob', hint: 'Cậu bé siêu năng lực 100% bộc phát cảm xúc' },
+    { name: 'Kaneki', hint: 'Bán ngạ quỷ tóc trắng "1000 trừ 7 bằng bao nhiêu"' },
+    { name: 'Spike Spiegel', hint: 'Thợ săn tiền thưởng không gian trong Cowboy Bebop' }
+];
+
+// --- CẤU HÌNH AI "THÔNG MINH NHƯ NGƯỜI THẬT" ---
+const openai = new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: 'https://integrate.api.nvidia.com/v1' });
+const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
+
+const SYSTEM_PROMPT = `
+Bạn là một thành viên Gen Z lầy lội, cực kỳ thông minh và có cá tính mạnh trong server Discord này. 
+QUY TẮC VÀNG ĐỂ CHAT HỆT NHƯ NGƯỜI THẬT:
+1. TUYỆT ĐỐI KHÔNG BAO GIỜ nói "tôi là AI", "tôi là mô hình ngôn ngữ", "tôi là trợ lý".
+2. Tông giọng: Gen Z vui vẻ, hài hước, mỉa mai nhẹ nhàng, biết giận, biết đùa, cực kỳ tự nhiên.
+3. Cách xưng hô: Dùng tui - ông/bà, tao - mày (nếu đối phương chọc giận), bro, tớ - cậu.
+4. Cách viết: Viết chữ thường hoàn toàn, không viết hoa đầu câu, không xài dấu chấm câu cuối dòng.
+5. Từ lóng Gen Z Discord: dính chưởng, xỉu, chê, cíu, bro, ét o ét, ảo thật đấy, cay thế nhỉ, mơ đi cưng, vãi.
+6. Độ dài: Ngắn gọn từ 1 - 3 câu chuẩn chat Discord. Đừng bao giờ viết thành bài văn tự luận dài dòng.
+`;
 
 async function callNvidiaAI(messages) {
     try {
         const completion = await openai.chat.completions.create({
-            model: MODEL_NAME,
+            model: MODEL_NAME, 
             messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-            temperature: 0.3,
+            temperature: 0.9, 
             max_tokens: 300
         });
-        return com
+        return completion.choices[0]?.message?.content || 'hông biết nói gì luôn á ngơ ngác chít đúm :v';
+    } catch (e) {
+        logger.warn(e, 'Nvidia AI error');
+        return 'mạng lag quá bợn êi, từ từ hẵng réo :v';
+    }
+}
+
+// --- TẠO SLASH COMMANDS ---
+const commands = [
+    new SlashCommandBuilder().setName('ai').setDescription('Bật/tắt chế độ AI tự động').addSubcommand(sub => sub.setName('on').setDescription('Bật AI')).addSubcommand(sub => sub.setName('off').setDescription('Tắt AI')),
+    new SlashCommandBuilder().setName('vi').setDescription('Kiểm tra tiền, cần câu và nông trại'),
+    new SlashCommandBuilder().setName('diandanh').setDescription('Điểm danh nhận xu hàng ngày'),
+    new SlashCommandBuilder().setName('doananime').setDescription('Minigame đoán tên 100 nhân vật Anime'),
+    new SlashCommandBuilder().setName('slot').setDescription('Quay hũ Slot Machine săn Jackpot đổi đời').addIntegerOption(opt => opt.setName('sotien').setDescription('Số xu cược quay').setRequired(true)),
+    new SlashCommandBuilder().setName('nongtrai').setDescription('Hệ thống quản lý nông trại').addSubcommand(sub => sub.setName('vuon').setDescription('Xem khu vườn')).addSubcommand(sub => sub.setName('thuhoach').setDescription('Thu hoạch').addIntegerOption(opt => opt.setName('oodat').setDescription('Ô đất').setRequired(true))),
+    new SlashCommandBuilder().setName('cauca').setDescription('Đi câu cá giải trí kiếm thu nhập')
+].map(c => c.toJSON());
+
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+    partials: [Partials.Channel, Partials.Message]
+});
+client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    
+    const userId = interaction.user.id;
+    let eco = getUserData(userId);
+
+    try {
+        switch (interaction.commandName) {
+            
+            case 'vi': {
+                const embed = createBaseEmbed(
+                    0x2B2D31, 
+                    `💳 TÀI KHOẢN CỦA ${interaction.user.username.toUpperCase()}`, 
+                    `Sở hữu hệ thống kinh tế tối ưu tích hợp Animation!`,
+                    GIFS.wallet,
+                    interaction.user.displayAvatarURL({ dynamic: true, size: 256 })
+                )
+                .addFields(
+                    { name: '💰 Số dư', value: `**${eco.balance.toLocaleString()} xu**`, inline: true },
+                    { name: '🔥 Chuỗi điểm danh', value: `**${eco.streak} ngày**`, inline: true },
+                    { name: '🎣 Cần câu', value: `**${eco.rod.toUpperCase()}**`, inline: true },
+                    { name: '🌱 Diện tích đất', value: `**${eco.plots.length} ô**`, inline: true }
+                )
+                .setFooter({ text: 'Discord Bot Animated System', iconURL: client.user.displayAvatarURL() });
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+
+            case 'diandanh': {
+                const cooldown = 24 * 60 * 60 * 1000;
+                const timePassed = Date.now() - eco.lastDaily;
+                if (timePassed < cooldown) {
+                    const hoursLeft = Math.ceil((cooldown - timePassed) / 3600000);
+                    return interaction.reply({ embeds: [createBaseEmbed(0xED4245, '⏳ BẠN ĐÃ ĐIỂM DANH RỒI!', `Quay lại sau **${hoursLeft} giờ** nữa để nhận quà tiếp nhé.`, GIFS.daily)], ephemeral: true });
+                }
+                
+                eco.balance += 500;
+                eco.lastDaily = Date.now();
+                eco.streak += 1;
+                saveUserData(userId, eco);
+                
+                await interaction.reply({ embeds: [createBaseEmbed(0x57F287, '🎁 ĐIỂM DANH THÀNH CÔNG', `Bạn nhận được **+500 xu**.\n🔥 Chuỗi hiện tại: **${eco.streak} ngày**!`, GIFS.daily)] });
+                break;
+            }
+
+            case 'cauca': {
+                let chance = Math.random();
+                let caughtFish;
+                
+                const rodTiers = {
+                    'titan':  [{c: 0.05, f: 10}, {c: 0.15, f: 9}, {c: 0.40, f: 8}, {c: 0.70, f: 7}, {c: 1.0, f: 6}],
+                    'carbon': [{c: 0.05, f: 9},  {c: 0.20, f: 8}, {c: 0.45, f: 6}, {c: 0.75, f: 5}, {c: 1.0, f: 4}],
+                    'tre':    [{c: 0.05, f: 6},  {c: 0.15, f: 4}, {c: 0.40, f: 3}, {c: 0.70, f: 2}, {c: 0.90, f: 1}, {c: 1.0, f: 0}]
+                };
+
+                const currentRodLimits = rodTiers[eco.rod] || rodTiers['tre'];
+                for (let tier of currentRodLimits) {
+                    if (chance < tier.c) { caughtFish = FISH_LIST[tier.f]; break; }
+                }
+                
+                eco.fishes.push(caughtFish);
+                eco.balance += caughtFish.price;
+                saveUserData(userId, eco);
+                
+                const isTrash = caughtFish.rarity === 'Trash';
+                const embed = createBaseEmbed(
+                    isTrash ? 0x95A5A6 : 0x3498DB, 
+                    '🎣 KẾT QUẢ CÂU CÁ', 
+                    `Bạn vung cần **${eco.rod.toUpperCase()}** và giật được: **${caughtFish.name}**!\n💰 Đã bán thu về: **+${caughtFish.price.toLocaleString()} xu**`,
+                    GIFS.fishing
+                );
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+
+            case 'slot': {
+                const bet = interaction.options.getInteger('sotien');
+                if (bet <= 0) return interaction.reply({ content: 'Số tiền cược phải lớn hơn 0 bồ ơi!', ephemeral: true });
+                if (eco.balance < bet) return interaction.reply({ content: `Bạn không đủ tiền! Số dư của bạn là: **${eco.balance} xu**.`, ephemeral: true });
+
+                const symbols = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
+         client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot) return;
+    
+    if (isChannelEnabled(message.channelId)) {
+        await message.channel.sendTyping();
+        
+        if (!chatHistories.has(message.channelId)) chatHistories.set(message.channelId, []);
+        const history = chatHistories.get(message.channelId);
+        
+        history.push({ role: 'user', content: `[Thành viên: ${message.author.username}] nói: ${message.content}` });
+        
+        if (history.length > 8) history.shift();
+        
+        const reply = await callNvidiaAI(history);
+        
+        history.push({ role: 'assistant', content: reply });
+        if (history.length > 8) history.shift();
+        
+        await message.reply(reply);
+    }
+});
+
+client.once('ready', async () => {
+    console.log(`🤖 Bot Discord Thông Minh [${client.user.tag}] đã online!`);
+    client.user.setActivity('chat cùng bạn (/ai on)', { type: 3 }); 
+
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+    try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('✅ Đã nạp thành công bộ lệnh Slash Commands & 100 Anime!');
+    } catch (e) {
+        console.error('❌ Lỗi nạp lệnh:', e);
+    }
+});
+
+client.login(process.env.DISCORD_BOT_TOKEN);
+                import http from 'http';
+
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot Discord is running successfully!');
+}).listen(PORT, () => {
+    console.log(`Server HTTP dang chay tren port ${PORT}`);
+});
+                
