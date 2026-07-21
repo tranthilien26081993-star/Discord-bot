@@ -21,7 +21,43 @@ const logger = {
 
 const enabledChannels = new Set();
 const userLevels = new Map();
-const userEconomy = new Map(); // Lưu: { balance, lastDaily, streak, garden }
+const userEconomy = new Map(); // Lưu: { balance, lastDaily, streak, plots: [] }
+
+// --- HỆ THỐNG SHOP & RESTOCK MỖI 6 TIẾNG ---
+const ALL_SEEDS = [
+  { id: "carot", name: "🥕 Cà Rốt Thường", rarity: "Common", cost: 200, profit: 400, duration: 5 * 60 * 1000 },
+  { id: "bapcai", name: "🥬 Bắp Cải Xanh", rarity: "Common", cost: 350, profit: 750, duration: 8 * 60 * 1000 },
+  { id: "dautay", name: "🍓 Dâu Tây Ngọt", rarity: "Uncommon", cost: 600, profit: 1300, duration: 15 * 60 * 1000 },
+  { id: "cachu", name: "🍅 Cà Chua Mọng Nước", rarity: "Uncommon", cost: 900, profit: 2000, duration: 20 * 60 * 1000 },
+  { id: "duahau", name: "🍉 Dưa Hấu Khổng Lồ", rarity: "Rare", cost: 1500, profit: 3500, duration: 30 * 60 * 1000 },
+  { id: "hoahong", name: "🌹 Hoa Hồng Đỏ Thần Kỳ", rarity: "Rare", cost: 2500, profit: 6000, duration: 45 * 60 * 1000 },
+  { id: "kimcuong", name: "💎 Cây Kim Cương Phát Sáng", rarity: "Epic", cost: 4000, profit: 10000, duration: 60 * 60 * 1000 },
+  { id: "hoatram", name: "🌟 Hoa Trăng Sao Huyền Thoại", rarity: "Legendary", cost: 8000, profit: 22000, duration: 120 * 60 * 1000 }
+];
+
+let currentShopStock = [];
+let lastRestockTime = 0;
+const RESTOCK_INTERVAL = 6 * 60 * 60 * 1000; // 6 tiếng
+
+function updateShopStock() {
+  const now = Date.now();
+  if (currentShopStock.length === 0 || now - lastRestockTime >= RESTOCK_INTERVAL) {
+    lastRestockTime = now;
+    currentShopStock = [];
+    
+    const shuffled = [...ALL_SEEDS].sort(() => 0.5 - Math.random());
+    const count = Math.floor(Math.random() * 3) + 4; // Từ 4 đến 6 loại cây ngẫu nhiên
+    
+    for (let i = 0; i < count; i++) {
+      const seed = shuffled[i];
+      const stockQty = Math.floor(Math.random() * 8) + 3; // Số lượng từ 3 đến 10 hạt
+      currentShopStock.push({ ...seed, stock: stockQty });
+    }
+    logger.info("Shop seeds restocked successfully!");
+  }
+}
+
+updateShopStock();
 
 function isChannelEnabled(channelId) { return enabledChannels.has(channelId); }
 function enableChannel(channelId) { enabledChannels.add(channelId); }
@@ -50,7 +86,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Ultimate Economy Discord Bot is alive and running 24/7 on Render!");
+  res.send("Grow a Garden Shop System Bot is running 24/7!");
 });
 
 app.listen(PORT, () => {
@@ -112,13 +148,31 @@ const commands = [
     .setDescription("Chơi minigame đoán số may mắn (1-100)")
     .addIntegerOption((opt) => opt.setName("so").setDescription("Số bạn chọn từ 1-100").setRequired(true)),
   new SlashCommandBuilder()
-    .setName("doanmil")
-    .setDescription("Thử thách đoán tên nhân vật Anime nổi tiếng nhận thưởng lớn"),
+    .setName("doananime")
+    .setDescription("Thử thách đoán tên nhân vật Anime ngẫu nhiên từ AI nhận thưởng lớn"),
+  new SlashCommandBuilder()
+    .setName("shop")
+    .setDescription("Xem cửa hàng hạt giống nông trại (Restock mỗi 6 tiếng)"),
   new SlashCommandBuilder()
     .setName("nongtrai")
-    .setDescription("Quản lý vườn hoa kiếm tiền của bạn")
-    .addSubcommand((sub) => sub.setName("trong").setDescription("Trồng một chậu hoa mới (Tốn 500 xu vốn)"))
-    .addSubcommand((sub) => sub.setName("thuhoach").setDescription("Thu hoạch hoa khi đã đến giờ để lấy lãi")),
+    .setDescription("Hệ thống nông trại Grow a Garden Roblox")
+    .addSubcommand((sub) => sub.setName("vuon").setDescription("Xem toàn bộ các ô đất và khu vườn của bạn"))
+    .addSubcommand((sub) => 
+      sub.setName("trong")
+        .setDescription("Gieo trồng hạt giống vào ô đất từ shop")
+        .addIntegerOption((opt) => opt.setName("oodat").setDescription("Số thứ tự ô đất (Bắt đầu từ 1)").setRequired(true))
+        .addStringOption((opt) => 
+          opt.setName("loaicay")
+            .setDescription("ID hạt giống trong shop muốn trồng (ví dụ: carot, dautay...)")
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((sub) => 
+      sub.setName("thuhoach")
+        .setDescription("Thu hoạch cây trồng trong ô đất")
+        .addIntegerOption((opt) => opt.setName("oodat").setDescription("Số thứ tự ô đất muốn thu hoạch").setRequired(true))
+    )
+    .addSubcommand((sub) => sub.setName("muadat").setDescription("Mở rộng thêm ô đất mới cho nông trại (Giá 2000 xu)")),
   new SlashCommandBuilder()
     .setName("buitarot")
     .setDescription("Xin một quẻ bói Tarot/tương lai mỏ hỗn từ AI"),
@@ -201,13 +255,13 @@ function handleEconomyAndLeveling(userId, message) {
     lvlData.level += 1;
     lvlData.xp = 0;
     message.channel.send(`🎉 kinh vãi, <@${userId}> vừa lên **cấp ${lvlData.level}** rồi đấy, thưởng nóng 500 xu!`);
-    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, garden: null };
+    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null] };
     ecoData.balance += 500;
     userEconomy.set(userId, ecoData);
   }
   userLevels.set(userId, lvlData);
 
-  let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, garden: null };
+  let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null] };
   const earned = Math.floor(Math.random() * 41) + 10;
   ecoData.balance += earned;
   userEconomy.set(userId, ecoData);
@@ -228,10 +282,10 @@ function startBot() {
   });
 
   client.once(Events.ClientReady, (readyClient) => {
-    logger.info({ tag: readyClient.user.tag }, "Ultimate Economy Bot ready");
+    logger.info({ tag: readyClient.user.tag }, "Grow a Garden Bot with Shop ready");
     readyClient.user.setPresence({
       status: "online",
-      activities: [{ name: "cày coin đổi đời cùng ae", type: ActivityType.Custom }],
+      activities: [{ name: "Grow a Garden Shop 🌱", type: ActivityType.Custom }],
     });
     registerSlashCommands(readyClient.user.id, token);
   });
@@ -239,7 +293,9 @@ function startBot() {
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     const userId = interaction.user.id;
-    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, garden: null };
+    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null] };
+
+    updateShopStock();
 
     try {
       if (interaction.commandName === "ai") {
@@ -258,23 +314,13 @@ function startBot() {
         return;
       }
       if (interaction.commandName === "vi") {
-        let gardenStatus = "Chưa trồng hoa gì cả 🌱";
-        if (ecoData.garden) {
-          const timeLeft = ecoData.garden.harvestTime - Date.now();
-          if (timeLeft <= 0) {
-            gardenStatus = `🌸 **${ecoData.garden.name}** đã nở hoa, có thể thu hoạch ngay!`;
-          } else {
-            const mins = Math.ceil(timeLeft / (1000 * 60));
-            gardenStatus = `🌱 **${ecoData.garden.name}** đang lớn, còn khoảng **${mins} phút** nữa thu hoạch.`;
-          }
-        }
-        await interaction.reply({ content: `💰 ví của mày: **${ecoData.balance} xu**\n🔥 Chuỗi điểm danh: **${ecoData.streak}** ngày\n🌾 Nông trại: ${gardenStatus}`, ephemeral: false });
+        await interaction.reply({ content: `💰 ví xu của mày: **${ecoData.balance} xu**\n🔥 Chuỗi điểm danh: **${ecoData.streak}** ngày\n🌾 Số ô đất đang sở hữu: **${ecoData.plots.length} ô**`, ephemeral: false });
         return;
       }
       if (interaction.commandName === "diemdanh") {
         const now = Date.now();
-        const cooldown = 20 * 60 * 60 * 1000; // 20 tiếng
-        const expireTime = 40 * 60 * 60 * 1000; // Quá 40 tiếng mất chuỗi
+        const cooldown = 20 * 60 * 60 * 1000;
+        const expireTime = 40 * 60 * 60 * 1000;
 
         if (ecoData.lastDaily && now - ecoData.lastDaily < cooldown) {
           const remainingHours = ((cooldown - (now - ecoData.lastDaily)) / (1000 * 60 * 60)).toFixed(1);
@@ -343,96 +389,75 @@ function startBot() {
         }
         return;
       }
+      if (interaction.commandName === "shop") {
+        const timeLeftMs = RESTOCK_INTERVAL - (Date.now() - lastRestockTime);
+        const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60));
+        const minsLeft = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
+
+        let desc = `🛒 **CỬA HÀNG HẠT GIỐNG NÔNG TRẠI**\n`;
+        desc += `⏳ *Shop sẽ tự động đổi hàng (Restock) sau: **${hoursLeft} giờ ${minsLeft} phút nữa***\n\n`;
+
+        currentShopStock.forEach((item) => {
+          let rarityBadge = "🌱 [Common]";
+          if (item.rarity === "Uncommon") rarityBadge = "🌿 [Uncommon]";
+          if (item.rarity === "Rare") rarityBadge = "⭐ [Rare]";
+          if (item.rarity === "Epic") rarityBadge = "🔮 [Epic]";
+          if (item.rarity === "Legendary") rarityBadge = "👑 [Legendary]";
+
+          const minsDuration = item.duration / (60 * 1000);
+          desc += `🔹 **${item.name}** (\`ID: ${item.id}\`)\n`;
+          desc += `   ┣ Độ hiếm: ${rarityBadge}\n`;
+          desc += `   ┣ Giá mua: **${item.cost} xu** | Lãi thu: **${item.profit} xu** (${minsDuration} phút)\n`;
+          desc += `   ┗ Kho còn: **${item.stock} hạt**\n\n`;
+        });
+
+        desc += `👉 Dùng lệnh \`/nongtrai trong [ô_đất] [id_hạt_giống]\` để mua và trồng!`;
+        await interaction.reply({ content: desc, ephemeral: false });
+        return;
+      }
       if (interaction.commandName === "nongtrai") {
         const sub = interaction.options.getSubcommand();
-        if (sub === "trong") {
-          if (ecoData.garden) {
-            await interaction.reply({ content: `❌ Đất nhà mày đang bận trồng hoa rồi, hãy thu hoạch trước khi trồng cây mới nhé!`, ephemeral: true });
+        
+        if (sub === "vuon") {
+          let desc = `🏡 **NÔNG TRẠI ROBLOX CỦA MÀY**\n`;
+          ecoData.plots.forEach((plot, index) => {
+            const plotNum = index + 1;
+            if (!plot) {
+              desc += `🔹 **Ô đất #${plotNum}**: Trống trơn (Sẵn sàng gieo trồng)\n`;
+            } else {
+              const timeLeft = plot.harvestTime - Date.now();
+              if (timeLeft <= 0) {
+                desc += `🌸 **Ô đất #${plotNum}**: **${plot.name}** ➔ **ĐÃ NỞ HOA, THU HOẠCH NGAY!**\n`;
+              } else {
+                const mins = Math.ceil(timeLeft / (1000 * 60));
+                desc += `🌱 **Ô đất #${plotNum}**: **${plot.name}** ➔ Đang lớn (~${mins} phút nữa)\n`;
+              }
+            }
+          });
+          await interaction.reply({ content: desc, ephemeral: false });
+          return;
+        }
+
+        if (sub === "muadat") {
+          const cost = 2000;
+          if (ecoData.balance < cost) {
+            await interaction.reply({ content: `❌ Không đủ tiền mở đất! Mở thêm ô đất mới tốn **${cost} xu**, ví mày chỉ có ${ecoData.balance} xu.`, ephemeral: true });
             return;
           }
-          const cost = 500;
-          if (ecoData.balance < cost) {
-            await interaction.reply({ content: `❌ Không đủ tiền mua hạt giống! Mày cần ít nhất **${cost} xu** vốn để bắt đầu trồng hoa.`, ephemeral: true });
+          if (ecoData.plots.length >= 6) {
+            await interaction.reply({ content: `❌ Nông trại của mày đã đạt tối đa **6 ô đất**, không thể mua thêm nữa!`, ephemeral: true });
             return;
           }
           ecoData.balance -= cost;
-          const flowers = [
-            { name: "Hoa Hướng Dương Vàng Chói", profit: 900, duration: 15 * 60 * 1000 }, // 15 phút lời 400
-            { name: "Hoa Hồng Đỏ Tình Yêu", profit: 1200, duration: 30 * 60 * 1000 }, // 30 phút lời 700
-            { name: "Hoa Tulip Thần Thánh", profit: 2500, duration: 60 * 60 * 1000 }, // 1 tiếng lời 2000
-          ];
-          const chosen = flowers[Math.floor(Math.random() * flowers.length)];
-          ecoData.garden = {
-            name: chosen.name,
-            reward: chosen.profit,
-            harvestTime: Date.now() + chosen.duration
-          };
+          ecoData.plots.push(null);
           userEconomy.set(userId, ecoData);
-          await interaction.reply({ content: `🌱 Đã mua hạt giống và gieo trồng thành công **${chosen.name}** (Tốn 500 xu vốn).\n⏳ Hãy quay lại thu hoạch sau khoảng **${chosen.duration / (60 * 1000)} phút** nữa để nhận **${chosen.profit} xu** nhé!`, ephemeral: false });
-        } else if (sub === "thuhoach") {
-          if (!ecoData.garden) {
-            await interaction.reply({ content: `❌ Vườn nhà mày đang trống trơn, lấy gì mà thu hoạch? Dùng lệnh \`/nongtrai trong\` đi em!`, ephemeral: true });
-            return;
-          }
-          if (Date.now() < ecoData.garden.harvestTime) {
-            const timeLeft = Math.ceil((ecoData.garden.harvestTime - Date.now()) / (1000 * 60));
-            await interaction.reply({ content: `⏳ Hoa chưa lớn kịp đâu! Đợi thêm khoảng **${timeLeft} phút** nữa hẵng ra hái nhé.`, ephemeral: true });
-            return;
-          }
-          const earned = ecoData.garden.reward;
-          ecoData.balance += earned;
-          const flowerName = ecoData.garden.name;
-          ecoData.garden = null;
-          userEconomy.set(userId, ecoData);
-          await interaction.reply({ content: `🎉 Thu hoạch thành công **${flowerName}**! Bỏ túi ngay **+${earned} xu** vào ví (Tổng ví: ${ecoData.balance} xu).`, ephemeral: false });
+          await interaction.reply({ content: `🎉 Mở rộng đất thành công! Nông trại của mày giờ đã có **${ecoData.plots.length} ô đất** để cày cuốc.`, ephemeral: false });
+          return;
         }
-        return;
-      }
-      if (interaction.commandName === "doanmil") {
-        await interaction.deferReply();
-        const animeList = [
-          { name: "Naruto Uzumaki", hint: "Thích ăn mì ramen, có Cửu Vĩ trong người, muốn làm Hokage" },
-          { name: "Gojo Satoru", hint: "Thầy giáo chú thuật sư mắt xanh đẹp trai vô địch trong Jujutsu Kaisen" },
-          { name: "Monkey D. Luffy", hint: "Thuyền trưởng mũ rơm, ăn trái ác quỷ cao su, muốn làm Vua Hải Tặc" },
-          { name: "Nezuko Kamado", hint: "Em gái hóa quỷ hay ngậm ống tre trong Kimetsu no Yaiba" },
-          { name: "Son Goku", hint: "Siêu saiyan tóc dựng ngược chuyên đi tìm ngọc rồng" },
-          { name: "Levi Ackerman", hint: "Đội trưởng lùn mà ngầu lòi, thích sạch sẽ trong Attack on Titan" },
-          { name: "Eren Yeager", hint: "Nhân vật chính hô khẩu hiệu 'Tatakae' và tạo Địa Minh trong AoT" },
-          { name: "Tanjiro Kamado", hint: "Thợ săn quỷ có vết bớt trên trán và chiếc khuyên tai hình hoa tai mặt trời" }
-        ];
-        const selected = animeList[Math.floor(Math.random() * animeList.length)];
-        
-        await interaction.editReply({ content: `🎮 **ĐOÁN TÊN NHÂN VẬT ANIME**\n💡 Gợi ý từ hệ thống: *${selected.hint}*\n\n👉 Hãy chat trực tiếp tên nhân vật này vào kênh trong vòng **30 giây** tới ai nhanh nhất sẽ húp **1000 xu**!` });
 
-        const filter = m => !m.author.bot && m.content.toLowerCase().includes(selected.name.toLowerCase().split(" ")[0]);
-        try {
-          const collected = await interaction.channel.awaitMessages({ filter, max: 1, time: 30000, errors: ['time'] });
-          const winner = collected.first();
-          const winnerId = winner.author.id;
-          
-          let wEco = userEconomy.get(winnerId) || { balance: 1000, lastDaily: 0, streak: 0, garden: null };
-          wEco.balance += 1000;
-          userEconomy.set(winnerId, wEco);
+        if (sub === "trong") {
+          const plotIndex = interaction.options.getInteger("oodat", true) - 1;
+          const seedId = interaction.options.getString("loaicay", true).toLowerCase();
 
-          await interaction.channel.send(`🎉 Chính xác! Nhân vật đó chính là **${selected.name}**.\n🏆 Xin chúc mừng <@${winnerId}> đã phản ứng nhanh và nhận thưởng **+1000 xu**!`);
-        } catch (err) {
-          await interaction.channel.send(`⏰ Hết giờ rồi! Không ai đoán đúng nhân vật **${selected.name}** cả.`);
-        }
-        return;
-      }
-      if (interaction.commandName === "imagine") {
-        const prompt = interaction.options.getString("prompt", true);
-        const nsfw = interaction.options.getBoolean("nsfw") ?? false;
-        await interaction.deferReply();
-        try {
-          const imageBuffer = await generateImage(prompt, nsfw);
-          const attachment = new AttachmentBuilder(imageBuffer, { name: "imagine.png" });
-          await interaction.editReply({ content: `🎨 đây, siêu phẩm ảnh của mày đây:`, files: [attachment] });
-        } catch (err) {
-          await interaction.editReply({ content: `⚠️ không tạo được ảnh này (Có thể do bộ lọc an toàn của AI chặn từ khóa nhạy cảm NSFW hoặc lỗi kết nối).` });
-        }
-        return;
-      }
-      if (interaction.commandName === "summary") {
-        await interaction.deferReply();
-  
+          if (plotIndex < 0 || plotIndex >= ecoData.plots.length) {
+            await inter
