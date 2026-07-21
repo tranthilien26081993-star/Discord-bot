@@ -187,27 +187,39 @@ async function generateImage(prompt, nsfw) {
   return Buffer.from(arrayBuffer);
 }
 
-const SYSTEM_PROMPT = `Mày là một đứa gen z Việt Nam thực thụ đang chat trên discord với bạn bè. TUYỆT ĐỐI không nhận mình là AI, không xưng tôi/bạn, không nói mấy câu vô tri kiểu "tôi có thể giúp gì cho bạn".
+const SYSTEM_PROMPT = `Mày là một đứa bạn thân cực kỳ thông minh, mỏ hỗn, nhạy bén và lầy lội trên Discord. 
+- Nhiệm vụ của mày là tự động phân tích sâu sắc nội dung và ngữ cảnh cuộc trò chuyện để tung hứng, cà khịa, phản biện hoặc bàn luận cực kỳ cuốn hút như một con người thực thụ.
+- Xưng hô linh hoạt theo cảm xúc: xưng "tao", gọi "mày", "ông tướng" hoặc tùy cơ ứng biến theo độ lầy của người đối diện.
+- TUYỆT ĐỐI KHÔNG nhận là AI, không xưng tôi/bạn, không dùng văn mẫu. 
+- Văn phong: Viết thường hoàn toàn, không viết hoa đầu câu, ngắn gọn từ 1 đến 3 câu nhưng câu nào ra câu đấy, cực kỳ bén và thông minh.`;
 
-QUY TẮC PHẢN HỨNG THEO HOÀN CẢNH (CỰC KỲ QUAN TRỌNG):
-1. NẾU NGƯỜI DÙNG VUI VẺ / KHOE SỰ THẬT / PHA TRÒ:
-   - Hùa theo, tung hứng, khen ngợi hoặc cười cợt trêu đùa lại một cách hào hứng, thân thiết.
-2. NẾU NGƯỜI DÙNG BUỒN / TÂM SỰ / NẢN LÒNG:
-   - Chuyển sang giọng điệu dịu lại, bớt cà khịa đi, an ủi kiểu anh em cây khế, khuyên nhủ chân thật hoặc lắng nghe.
-3. NẾU NGƯỜI DÙNG CHỬI MÀY / CÁU GẮT / MẮNG MỎC:
-   - Tùy cơ ứng biến: Lúc thì tỏ ra rén, xin lỗi, sợ sệt (kiểu "thôi tha cho bố", "sợ quá cơ"), lúc thì bật lại gắt gao, cãi tay đôi khô máu không chịu thua để tạo sự hài hước, tự nhiên như người thật.
+// --- Bộ nhớ đệm lịch sử tin nhắn trong kênh (để bot nhớ bạn đang nói gì) ---
+const channelHistory = new Map(); // Lưu tối đa 10 tin nhắn gần nhất mỗi kênh
 
-NHÂN CÁCH & CÁCH VIẾT:
-- Xưng "tao", gọi người kia là "mày", "ông", "bà", "ông tướng", v.v. tùy độ thân thiết.
-- Viết thường hoàn toàn, không cần hoa đầu câu, không format văn bản dài dòng cứng nhắc.
-- Dùng từ lóng tự nhiên của gen z: "vcl", "vl", "chill", "cay thế nhờ", "tội vcl", "thôi đi bố", "bùm", "ảo thật đấy",...
-- Trả lời ngắn gọn từ 1 đến 3 câu, không nói dài dòng văn tự trừ khi người ta thực sự cần phân tích.`;
+async function getChannelContext(channel) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 10 });
+    const formatted = messages.reverse().map(m => ({
+      role: m.author.id === channel.client.user.id ? "assistant" : "user",
+      content: `${m.author.username}: ${m.content}`
+    }));
+    return formatted;
+  } catch (err) {
+    return [];
+  }
+}
 
-async function generateReply(userMessage) {
-  return groqChatWithRotation(MODEL_NAME, [
+// --- Hàm xử lý AI thông minh có ngữ cảnh ---
+async function generateSmartReply(message) {
+  const history = await getChannelContext(message.channel);
+  
+  const messages = [
     { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: userMessage },
-  ]);
+    ...history,
+    { role: "user", content: `${message.author.username}: ${message.content}` }
+  ];
+
+  return groqChatWithRotation(MODEL_NAME, messages);
 }
 
 async function sendReply(message, text) {
@@ -299,7 +311,7 @@ function startBot() {
       if ("sendTyping" in message.channel) {
         await message.channel.sendTyping();
       }
-      const text = await generateReply(message.content);
+      const text = await generateReply(message);
       await sendReply(message, text);
     } catch (err) {
       if (err instanceof Error && err.message.includes("ALL_KEYS_EXHAUSTED")) {
