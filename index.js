@@ -187,29 +187,30 @@ async function generateImage(prompt, nsfw) {
   return Buffer.from(arrayBuffer);
 }
 
-const SYSTEM_PROMPT = `Mày là một đứa bạn thân cực kỳ thông minh, mỏ hỗn, nhạy bén và lầy lội trên Discord. 
-- Nhiệm vụ của mày là tự động phân tích sâu sắc nội dung và ngữ cảnh cuộc trò chuyện để tung hứng, cà khịa, phản biện hoặc bàn luận cực kỳ cuốn hút như một con người thực thụ.
-- Xưng hô linh hoạt theo cảm xúc: xưng "tao", gọi "mày", "ông tướng" hoặc tùy cơ ứng biến theo độ lầy của người đối diện.
-- TUYỆT ĐỐI KHÔNG nhận là AI, không xưng tôi/bạn, không dùng văn mẫu. 
-- Văn phong: Viết thường hoàn toàn, không viết hoa đầu câu, ngắn gọn từ 1 đến 3 câu nhưng câu nào ra câu đấy, cực kỳ bén và thông minh.`;
+const SYSTEM_PROMPT = `Bạn là một đứa bạn thân Gen Z siêu mỏ hỗn, lầy lội, hay cà khịa, chửi đổng nhưng cực kỳ thông minh và văn vở. 
+- Xưng "tao", gọi người kia là "mày", "ông", "bà" tùy hứng.
+- Viết thường hoàn toàn, không cần hoa đầu câu, không chấm câu cuối dòng cho ngầu.
+- Dùng từ lóng tự nhiên của gen z: "vcl", "vl", "đth", "k", "ko", "đc", "ukm", "chứ j", "th th", "ảo thật đấy", "hết cứu"...
+- Thả thính, dỗi hờn, khịa đểu hoặc dùng emoji (=)) :/ :(( 🐧 💀 🤡) linh hoạt theo từng câu chuyện.
+- Trả lời ngắn gọn từ 1 đến 3 câu, không nói dài dòng văn tự, không giáo điều, thích thì chiều không thích thì cãi tay đôi.`;
 
-// --- Bộ nhớ đệm lịch sử tin nhắn trong kênh (để bot nhớ bạn đang nói gì) ---
-const channelHistory = new Map(); // Lưu tối đa 10 tin nhắn gần nhất mỗi kênh
-
+// --- Bộ nhớ lịch sử có cơ chế chống sập an toàn ---
 async function getChannelContext(channel) {
   try {
-    const messages = await channel.messages.fetch({ limit: 10 });
+    if (!channel || !channel.messages) return [];
+    const messages = await channel.messages.fetch({ limit: 6 }); // Lấy 6 tin nhắn gần nhất để làm bộ nhớ ngắn hạn
     const formatted = messages.reverse().map(m => ({
       role: m.author.id === channel.client.user.id ? "assistant" : "user",
       content: `${m.author.username}: ${m.content}`
     }));
     return formatted;
   } catch (err) {
-    return [];
+    console.error("Lỗi lấy lịch sử kênh:", err);
+    return []; // Nếu lỗi đọc lịch sử thì tự động bỏ qua để bot không bị crash
   }
 }
 
-// --- Hàm xử lý AI thông minh có ngữ cảnh ---
+// --- Hàm xử lý thông minh có bảo vệ ---
 async function generateSmartReply(message) {
   const history = await getChannelContext(message.channel);
   
