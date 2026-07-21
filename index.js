@@ -6,7 +6,6 @@ import {
 import express from 'express';
 import OpenAI from 'openai';
 
-// Express keep-alive server
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Bot is running!'));
@@ -17,7 +16,6 @@ const logger = {
 };
 
 const aiChannels = new Set();
-const userLevels = new Map();
 const userEconomy = new Map();
 
 function enableChannel(channelId) { aiChannels.add(channelId); }
@@ -68,7 +66,7 @@ const openai = new OpenAI({
 });
 
 const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
-const SYSTEM_PROMPT = 'Bạn là một AI bản thân Gen Z siêu cấp lầy lội, thông minh, mỏ hỗn kỳ tình cảm. Viết hoàn toàn bằng chữ thường, không viết hoa đầu câu, không chấm câu cuối dòng.';
+const SYSTEM_PROMPT = 'Bạn là một AI Gen Z siêu cấp lầy lội, thông minh, mỏ hỗn cực tình cảm. Viết hoàn toàn bằng chữ thường, không viết hoa đầu câu, không chấm câu cuối dòng.';
 
 async function callNvidiaAI(messages) {
     try {
@@ -98,7 +96,7 @@ const ANIME_LIST = [
     { name: 'Loid Forger', hint: 'Điệp viên đỉnh cao có mật danh "Twilight"' },
     { name: 'Yor Forger', hint: 'Sát thủ khét tiếng với mật danh "Thường Công Chúa"' },
     { name: 'Denji', hint: 'Thợ săn quỷ nghèo khổ, có ước mơ cực kỳ mặn mòi' },
-    { name: 'Power', hint: 'Quỷ máu ngạo man, bạn thân của Denji' },
+    { name: 'Power', hint: 'Quỷ máu ngạo mạn, bạn thân của Denji' },
     { name: 'Makima', hint: 'Sĩ quan cấp cao điều khiển Chiến Hữu ác quỷ quyền lực' },
     { name: 'Katsuki Bakugo', hint: 'Thiếu gia nổ tung cá tính mạnh, bạn thời thơ ấu của Deku' },
     { name: 'Midoriya Izuku', hint: 'Cậu bé vô năng nhận lại sức mạnh One For All từ All Might' },
@@ -391,7 +389,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
             ecoData.fishes.push(caughtFish);
             ecoData.balance += caughtFish.price;
-            userEconomy.set(userId, 
 client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     if (isChannelEnabled(message.channelId)) {
@@ -414,3 +411,4 @@ client.once('ready', async () => {
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
+                   userEconomy.set(userId,      
