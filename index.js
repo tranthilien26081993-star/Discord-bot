@@ -47,20 +47,6 @@ function createBaseEmbed(color, title, description, imageGif = null, thumbnailGi
 }
 
 // --- DỮ LIỆU GAME ---
-const ALL_SEEDS = [
-    { id: 'lua', name: '🌾 Lúa Nước Hạt Vàng', rarity: 'Common', cost: 100, profit: 250, duration: 3 * 60 * 1000 },
-    { id: 'carot', name: '🥕 Củ Rốt Thường', rarity: 'Common', cost: 200, profit: 450, duration: 5 * 60 * 1000 },
-    { id: 'bapcas', name: '🌽 Bắp Cải Xanh', rarity: 'Common', cost: 350, profit: 750, duration: 8 * 60 * 1000 },
-    { id: 'khoai', name: '🍠 Khoai Lang Tím', rarity: 'Uncommon', cost: 450, profit: 1000, duration: 10 * 60 * 1000 },
-    { id: 'dautay', name: '🍓 Dâu Tây Ngọt', rarity: 'Uncommon', cost: 600, profit: 1300, duration: 15 * 60 * 1000 },
-    { id: 'cachua', name: '🍅 Cà Chua Mọng Nước', rarity: 'Rare', cost: 900, profit: 2000, duration: 20 * 60 * 1000 },
-    { id: 'nho', name: '🍇 Nho Xanh Trĩu Quả', rarity: 'Rare', cost: 1200, profit: 2800, duration: 25 * 60 * 1000 },
-    { id: 'saurieng', name: '🍈 Sầu Riêng Ngọt Lịm', rarity: 'Epic', cost: 3000, profit: 8000, duration: 45 * 60 * 1000 },
-    { id: 'hoatran', name: '✨ Hoa Trắng Sao Huyền Thoại', rarity: 'Legendary', cost: 8000, profit: 22000, duration: 120 * 60 * 1000 },
-    { id: 'nhansam', name: '🌿 Nhân Sâm Ngàn Năm', rarity: 'Legendary', cost: 15000, profit: 45000, duration: 180 * 60 * 1000 },
-    { id: 'acquy', name: '🔥 Quả Ác Quỷ Thần Bí', rarity: 'Mythic', cost: 40000, profit: 150000, duration: 300 * 60 * 1000 }
-];
-
 const FISH_LIST = [
     { name: '👢 Chiếc Ủng Rách (Rác)', price: 10, rarity: 'Trash' },
     { name: '🐡 Cá Lóc Đồng', price: 80, rarity: 'Common' },
@@ -77,7 +63,6 @@ const FISH_LIST = [
 
 // --- KHO 100 NHÂN VẬT ANIME CHI TIẾT ---
 const ANIME_LIST = [
-    // ONE PIECE
     { name: 'Luffy', hint: 'Thuyền trưởng Băng Mũ Rơm có ước mơ trở thành Vua Hải Tặc' },
     { name: 'Zoro', hint: 'Kiếm sĩ phái Tam Kiếm siêu ngầu nhưng cực kỳ mù đường' },
     { name: 'Sanji', hint: 'Đầu bếp mê gái mê đấm bằng chân, thuộc Băng Mũ Rơm' },
@@ -88,8 +73,6 @@ const ANIME_LIST = [
     { name: 'Ace', hint: 'Anh trai Luffy sở hữu Trái Hỏa Quyền Mera Mera no Mi' },
     { name: 'Sabo', hint: 'Tổng tham mưu trưởng Quân Cách Mạng, anh em kết nghĩa của Luffy' },
     { name: 'Shanks', hint: 'Hải tặc Tóc Đỏ đã truyền cảm hứng và trao chiếc mũ rơm cho Luffy' },
-
-    // NARUTO
     { name: 'Naruto', hint: 'Hồ ly chín đuôi Ninja thích ăn ramen Ichiraku, ước mơ làm Hokage' },
     { name: 'Sasuke', hint: 'Tộc nhân Uchiha sở hữu Sharingan và ước mơ trả thù anh trai' },
     { name: 'Kakashi', hint: 'Ninja sao chép luôn đeo khẩu trang và đọc sách Thiên Đường Tung Tăng' },
@@ -100,8 +83,6 @@ const ANIME_LIST = [
     { name: 'Minato', hint: 'Tia Chớp Vàng Làng Lá, Hokage Đệ Tứ và là cha của Naruto' },
     { name: 'Madara', hint: 'Huyền thoại tộc Uchiha kích hoạt Kế hoạch Nguyệt Nhãn' },
     { name: 'Obito', hint: 'Kẻ đeo mặt nạ Tobi đứng sau tổ chức Akatsuki' },
-
-    // JUJUTSU KAISEN
     { name: 'Gojo Satoru', hint: 'Thầy giáo bịt mắt mạnh nhất với Kỹ năng Vô Hạn và Tử' },
     { name: 'Yuji Itadori', hint: 'Cậu học sinh trung học nuốt ngón tay của Vua Nguyền Hồn' },
     { name: 'Megumi Fushiguro', hint: 'Chú thuật sư triệu hồi Thập Chủng Thần Hình Graph' },
@@ -112,8 +93,6 @@ const ANIME_LIST = [
     { name: 'Yuta Okkotsu', hint: 'Chú thuật sư đặc cấp có Rika bảo vệ' },
     { name: 'Maki Zenin', hint: 'Cô gái tộc Zenin không có chú lực nhưng sử dụng chú cụ cực giỏi' },
     { name: 'Suguru Geto', hint: 'Bạn thân cũ của Gojo, chú thuật sư thu phục nguyền hồn' },
-
-    // DEMON SLAYER
     { name: 'Tanjiro', hint: 'Cậu bé đeo bông tai Hơi Thở Của Mặt Trời đi tìm thuốc chữa cho em' },
     { name: 'Nezuko', hint: 'Em gái ngậm ống tre dễ thương hóa quỷ chiến đấu cực ngầu' },
     { name: 'Zenitsu', hint: 'Sợ chết nhưng khi ngủ gật hóa thần Hơi Thở Của Sét' },
@@ -124,8 +103,6 @@ const ANIME_LIST = [
     { name: 'Tengen', hint: 'Âm Trụ hào hoa sở hữu 3 cô vợ ninja' },
     { name: 'Akaza', hint: 'Thượng Huyền Tam võ thuật đỉnh cao trong Thanh Gươm Diệt Quỷ' },
     { name: 'Muzan', hint: 'Chúa tể quỷ nguyên thủy giống Michael Jackson' },
-
-    // ATTACK ON TITAN
     { name: 'Eren', hint: 'Thần tượng tự do, biến thành Titan Tiến Công san bằng thế giới' },
     { name: 'Mikasa', hint: 'Cô gái tộc Ackerman cuồng bảo vệ Eren' },
     { name: 'Armin', hint: 'Bộ óc chiến thuật thiên tài của Trinh Sát Đoàn, Titan Đại Hình' },
@@ -136,8 +113,6 @@ const ANIME_LIST = [
     { name: 'Sasha', hint: 'Cô gái khoai tây mê ăn uống của Trinh Sát Đoàn' },
     { name: 'Hange', hint: 'Nhà nghiên cứu Titan điên rồ và nhiệt huyết' },
     { name: 'Historia', hint: 'Nữ hoàng thật sự của bức tường Paradis' },
-
-    // DRAGON BALL & ONE PUNCH MAN
     { name: 'Goku', hint: 'Khỉ con Saiyan thích đánh nhau nâng cấp Ultra Instinct' },
     { name: 'Vegeta', hint: 'Hoàng tử Saiyan kiêu hãnh cuồng tập luyện vượt Goku' },
     { name: 'Gohan', hint: 'Con trai Goku bộc phát sức mạnh hóa Super Saiyan 2 diệt Cell' },
@@ -148,8 +123,6 @@ const ANIME_LIST = [
     { name: 'Genos', hint: 'Cyborg hiện đại đệ tử ruột của Saitama' },
     { name: 'Tatsumaki', hint: 'Đứa Con Của Bão Siêu Năng Lực lùn tịt cá tính' },
     { name: 'Garou', hint: 'Quái vật nhân tạo hunted các anh hùng' },
-
-    // HUNTER X HUNTER & BLEACH
     { name: 'Gon', hint: 'Cậu bé câu cá đi tìm cha trở thành Hunter' },
     { name: 'Killua', hint: 'Sát thủ nhí tộc Zoldyck biến niệm thành dòng điện' },
     { name: 'Kurapika', hint: 'Tộc nhân Kurta mắt đỏ dùng xích diệt Băng Nhện' },
@@ -160,8 +133,6 @@ const ANIME_LIST = [
     { name: 'Aizen', hint: 'Kẻ phản diện thích tháo kính vuốt tóc tạo phản Thi魂Giới' },
     { name: 'Byakuya', hint: 'Đội trưởng đội 6 tộc trưởng Kuchiki sở hữu Senbonzakura' },
     { name: 'Kisuke', hint: 'Ông chủ tiệm ch chít mang dép cao su đội nón sọc' },
-
-    // SPY X FAMILY & CHAINSAW MAN
     { name: 'Anya', hint: 'Bé gái đọc suy nghĩ siêu ngố thích ăn đậu phụng "Waku Waku"' },
     { name: 'Loid', hint: 'Điệp viên Twilight làm người cha mẫu mực' },
     { name: 'Yor', hint: 'Nữ sát thủ Công chúa Gai làm người mẹ đảm đang' },
@@ -172,8 +143,6 @@ const ANIME_LIST = [
     { name: 'Reze', hint: 'Cô gái Quỷ Bom Bom gieo tương tư cho Denji' },
     { name: 'Pochita', hint: 'Quỷ Cưa đáng yêu biến thành trái tim của Denji' },
     { name: 'Kobeni', hint: 'Nữ thợ săn quỷ hay khóc nhè nhưng nhảy Dance Dance cực đỉnh' },
-
-    // ANIME KINH ĐIỂN VÀ ISEKAI
     { name: 'Light Yagami', hint: 'Học sinh thiên tài sở hữu Cuốn Sổ Tử Thần Death Note' },
     { name: 'L', hint: 'Thám tử thiên tài cuồng ăn đồ ngọt dáng ngồi khom lưng' },
     { name: 'Ryuk', hint: 'Thần chết cuồng ăn táo đỏ' },
@@ -196,7 +165,7 @@ const ANIME_LIST = [
     { name: 'Spike Spiegel', hint: 'Thợ săn tiền thưởng không gian trong Cowboy Bebop' }
 ];
 
-// --- CẤU HÌNH AI ---
+// --- CẤU HÌNH AI THÔNG MINH NHƯ NGƯỜI THẬT ---
 const openai = new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: 'https://integrate.api.nvidia.com/v1' });
 const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
 
@@ -226,7 +195,7 @@ async function callNvidiaAI(messages) {
     }
 }
 
-// --- SLASH COMMANDS ---
+// --- TẠO SLASH COMMANDS ---
 const commands = [
     new SlashCommandBuilder().setName('ai').setDescription('Bật/tắt chế độ AI tự động').addSubcommand(sub => sub.setName('on').setDescription('Bật AI')).addSubcommand(sub => sub.setName('off').setDescription('Tắt AI')),
     new SlashCommandBuilder().setName('vi').setDescription('Kiểm tra tiền, cần câu và nông trại'),
@@ -313,4 +282,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 if (eco.balance < bet) return interaction.reply({ content: `Bạn không đủ tiền! Số dư của bạn là: **${eco.balance} xu**.`, ephemeral: true });
 
                 const symbols = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
-                const result = [ symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random(
+                const result = [ symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random() * symbols.length)] ];
+
+                let multiplier = 0;
+                if (result[0] === result[1] && result[1] === result[2]) multiplier = 5; 
+                else if (result[0] === result[1] || result[1] === result[2] || result[0] === result[2]) multiplier = 1.5; 
+
+                eco.balance -= bet; 
+                const winnings = Math.floor(bet * multiplier);
+                eco.balance += winnings;
+                saveUserData(userId, eco);
+
+                const embed = createBaseEmbed(
+                    multiplier > 0 ? 0xF1C40F : 0x95A5A6, 
+                    '🎰 SLOT MACHINE ĐANG QUAY... 🎰',
+                    `**[ ${result.join(' | ')} ]**\n\n${multiplier > 0 ? `🎉 Trúng mánh! Bạn nhận được **+${winnings.toLocaleString()} xu**!` : `😢 Mất trắng **${bet.toLocaleString()} xu** rồi bồ tèo.`}`,
+                    GIFS.slot
+                );
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+            case 'doananime': {
+                const character = ANIME_LIST[Math.floor(Math.random() * ANIME_LIST.length)];
+                await interaction.reply({ 
+                    embeds: [createBaseEmbed(
+                        0x9B59B6, 
+                        '🧠 MINIGAME WEEBU 100 NHÂN VẬT', 
+                        `**Gợi ý:** ${character.hint}\n\n⏱️ *Bạn có 15 giây để gõ tên nhân vật vào kênh này!*`,
+                        GIFS.anime
+                    )] 
+                });
+                try {
+               
