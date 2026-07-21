@@ -212,16 +212,14 @@ async function getChannelContext(channel) {
 
 // --- Hàm xử lý thông minh có bảo vệ ---
 async function generateSmartReply(message) {
-  const history = await getChannelContext(message.channel);
-  
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
-    ...history,
-    { role: "user", content: `${message.author.username}: ${message.content}` }
+    { role: "user", content: message.content }
   ];
 
   return groqChatWithRotation(MODEL_NAME, messages);
 }
+
 
 async function sendReply(message, text) {
   const chunks = text.match(/[\s\S]{1,2000}/g) ?? [text];
