@@ -12,7 +12,7 @@ import {
   PermissionFlagsBits,
 } from "discord.js";
 import express from "express";
-import fetch from "node-fetch";
+import OpenAI from "openai";
 
 // --- Logger utility ---
 const logger = {
@@ -33,84 +33,21 @@ function disableChannel(channelId) {
   enabledChannels.delete(channelId);
 }
 
-// --- Groq Key Rotation Pool ---
-let groqKeys = [];
-let currentKeyIndex = 0;
-let keyCooldowns = {};
+// --- Khởi tạo NVIDIA NIM Client ---
+const openai = new OpenAI({
+  apiKey: process.env.NVIDIA_API_KEY,
+  baseURL: "https://integrate.api.nvidia.com/v1"
+});
 
-function initKeyPool() {
-  groqKeys = [];
-  if (process.env.GROQ_API_KEY) groqKeys.push(process.env.GROQ_API_KEY);
-  for (let i = 1; i <= 20; i++) {
-    const k = process.env[`GROQ_API_KEY_${i}`];
-    if (k) groqKeys.push(k);
-  }
-  if (groqKeys.length === 0) {
-    throw new Error("No Groq API keys found in environment variables!");
-  }
-  logger.info({ total: groqKeys.length }, "Groq API key pool initialized");
-}
-
-function getNextKey() {
-  const now = Date.now();
-  for (let i = 0; i < groqKeys.length; i++) {
-    const idx = (currentKeyIndex + i) % groqKeys.length;
-    if (!keyCooldowns[idx] || now > keyCooldowns[idx]) {
-      currentKeyIndex = (idx + 1) % groqKeys.length;
-      return groqKeys[idx];
-    }
-  }
-  let bestIdx = 0;
-  let minTime = Infinity;
-  for (let i = 0; i < groqKeys.length; i++) {
-    if (keyCooldowns[i] < minTime) {
-      minTime = keyCooldowns[i];
-      bestIdx = i;
-    }
-  }
-  return groqKeys[bestIdx];
-}
-
-async function groqChatWithRotation(model, messages) {
-  const maxAttempts = groqKeys.length * 2;
-  let attempts = 0;
-
-  while (attempts < maxAttempts) {
-    const apiKey = getNextKey();
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: 0.9,
-        max_tokens: 1024
-      })
-    });
-
-    if (res.status === 429) {
-      const currentIdx = (currentKeyIndex - 1 + groqKeys.length) % groqKeys.length;
-      keyCooldowns[currentIdx] = Date.now() + 60_000;
-      logger.warn(`Groq key index ${currentIdx} rate limited (429), switching key...`);
-      attempts++;
-      continue;
-    }
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Groq API error (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
-    return data.choices[0]?.message?.content || "Không có phản hồi từ AI.";
-  }
-
-  const err = new Error("All Groq keys exhausted due to rate limits.");
-  err.retrySec = 60;
-  throw err;
+// --- Hàm gọi AI chuẩn NVIDIA ---
+async function callNvidiaAI(messages) {
+  const completion = await openai.chat.completions.create({
+    model: "meta/llama-3.1-8b-instruct",
+    messages: messages,
+    temperature: 0.9,
+    max_tokens: 1024
+  });
+  return completion.choices[0]?.message?.content || "Không có phản hồi từ AI.";
 }
 
 // --- Render Express Web Server ---
@@ -126,7 +63,7 @@ app.listen(PORT, () => {
 });
 
 // --- Bot Main Logic ---
-const MODEL_NAME = "llama-3.1-8b-instant";
+const MODEL_NAME = "meta/llama-3.1-8b-instruct";
 
 const commands = [
   new SlashCommandBuilder()
@@ -153,7 +90,7 @@ const commands = [
     .addBooleanOption((opt) =>
       opt
         .setName("nsfw")
-        .setDescription("Bật chế độ NSFW")
+        .setDescription("Bật chế độ NSFW (true/false)")
         .setRequired(false)
     ),
 ].map((cmd) => cmd.toJSON());
@@ -198,7 +135,7 @@ const SYSTEM_PROMPT = `Bạn là một đứa bạn thân Gen Z siêu mỏ hỗn
 async function getChannelContext(channel) {
   try {
     if (!channel || !channel.messages) return [];
-    const messages = await channel.messages.fetch({ limit: 6 }); // Lấy 6 tin nhắn gần nhất để làm bộ nhớ ngắn hạn
+    const messages = await channel.messages.fetch({ limit: 6 });
     const formatted = messages.reverse().map(m => ({
       role: m.author.id === channel.client.user.id ? "assistant" : "user",
       content: `${m.author.username}: ${m.content}`
@@ -206,20 +143,21 @@ async function getChannelContext(channel) {
     return formatted;
   } catch (err) {
     console.error("Lỗi lấy lịch sử kênh:", err);
-    return []; // Nếu lỗi đọc lịch sử thì tự động bỏ qua để bot không bị crash
+    return [];
   }
 }
 
 // --- Hàm xử lý thông minh có bảo vệ ---
 async function generateSmartReply(message) {
+  const history = await getChannelContext(message.channel);
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: message.content }
+    ...history,
+    { role: "user", content: `${message.author.username}: ${message.content}` }
   ];
 
-  return groqChatWithRotation(MODEL_NAME, messages);
+  return callNvidiaAI(messages);
 }
-
 
 async function sendReply(message, text) {
   const chunks = text.match(/[\s\S]{1,2000}/g) ?? [text];
@@ -234,8 +172,6 @@ function startBot() {
     logger.error("DISCORD_BOT_TOKEN is not set in environment variables!");
     return;
   }
-
-  initKeyPool();
 
   const client = new Client({
     intents: [
@@ -286,7 +222,7 @@ function startBot() {
         try {
           const imageBuffer = await generateImage(prompt, nsfw);
           const attachment = new AttachmentBuilder(imageBuffer, { name: "imagine.png" });
-          await cmd.editReply({ content: `🎨 đây, vừa chế cái ảnh cho mày:`, files: [attachment] });
+          await cmd.editReply({ content: `🎨 đây, vừa chế cái ảnh cho mày (NSFW: ${nsfw ? "Bật" : "Tắt"}):`, files: [attachment] });
         } catch (err) {
           logger.error({ err }, "Image generation error");
           await cmd.editReply({ content: "lỗi render ảnh rồi, thử lại coi" });
@@ -310,17 +246,11 @@ function startBot() {
       if ("sendTyping" in message.channel) {
         await message.channel.sendTyping();
       }
-      const text = await generateReply(message);
+      const text = await generateSmartReply(message);
       await sendReply(message, text);
     } catch (err) {
-      if (err instanceof Error && err.message.includes("ALL_KEYS_EXHAUSTED")) {
-        const sec = err.retrySec ?? 60;
-        logger.warn({ sec }, "All Groq keys exhausted");
-        await message.reply(`hết sạch key để gáy rồi 🥱 đợi ${sec} giây rồi cãi tiếp nhé`);
-      } else {
-        logger.error({ err }, "Groq API error");
-        await message.reply("lag quá, nói lại nghe xem nào");
-      }
+      logger.error({ err }, "NVIDIA API error");
+      await message.reply("lag quá, nói lại nghe xem nào");
     }
   });
 
@@ -331,4 +261,3 @@ function startBot() {
 }
 
 startBot();
-  
