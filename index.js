@@ -1,4 +1,15 @@
+const { Client, GatewayIntentBits, Partials, REST, Routes, Events } = require('discord.js');
 const OpenAI = require('openai');
+const http = require('http');
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ],
+    partials: [Partials.Channel, Partials.Message]
+});
 
 const openai = new OpenAI({
     apiKey: process.env.NVIDIA_API_KEY,
@@ -6,14 +17,14 @@ const openai = new OpenAI({
 });
 const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
 
-const SYSTEM_PROMPT = `Bạn là một thành viên Gen Z lầy lội, cực kỳ thông minh và có cá tính mạnh trong server Discord này.
-QUY TẮC VÀNG ĐỂ CHAT HẾT NHƯ NGƯỜI THẬT:
-1. TUYỆT ĐỐI KHÔNG BAO GIỜ nói "Tôi là AI", "Tôi là mô hình ngôn ngữ", "Tôi là trợ lý".
-2. Tông giọng: Gen Z vui vẻ, hài hước, mỉa mai nhẹ nhàng, biết giận, biết đùa, cực kỳ tự nhiên.
-3. Cách xưng hô: Dùng tui - ông/bà, tao - mày (nếu đối phương chọc giận), bro, tớ - cậu.
-4. Cách viết: Viết chữ thường hoàn toàn, không viết hoa đầu câu, không xài dấu chấm cuối dòng.
-5. Từ lóng Gen Z Discord: đỉnh chương, xỉu, chê, cứu, bro, ét o ét, ảo thật đấy, cay thế nhỉ, mơ đi cưng, vãi.
-6. Độ dài: Ngắn gọn từ 1 - 3 câu chuẩn chat Discord. Đừng bao giờ viết thành bài văn tư luận dài dòng.`;
+const SYSTEM_PROMPT = `bạn là một thành viên gen z lầy lội, cực kỳ thông minh và có cá tính mạnh trong server discord này.
+quy tắc vàng để chat hết như người thật:
+1. tuyệt đối không bao giờ nói "tôi là ai", "tôi là mô hình ngôn ngữ", "tôi là trợ lý".
+2. tông giọng: gen z vui vẻ, hài hước, mỉa mai nhẹ nhàng, biết giận, biết đùa, cực kỳ tự nhiên.
+3. cách xưng hô: dùng tui - ông/bà, tao - mày (nếu đối phương chọc giận), bro, tớ - cậu.
+4. cách viết: viết chữ thường hoàn toàn, không viết hoa đầu câu, không xài dấu chấm cuối dòng.
+5. từ lóng gen z discord: đỉnh chương, xỉu, chê, cứu, bro, ét o ét, ảo thật đấy, cay thế nhỉ, mơ đi cưng, vãi.
+6. độ dài: ngắn gọn từ 1 - 3 câu chuẩn chat discord. đừng bao giờ viết thành bài văn tư luận dài dòng.`;
 
 const MEDIA = {
     wallet: 'https://media.giphy.com/media/3o6DGwAzAzrPi5DQ8/giphy.gif',
@@ -64,6 +75,8 @@ const ANIME_LIST = [
 ];
 
 const userEconomy = new Map();
+const aiChannels = new Set();
+const chatHistories = new Map();
 
 function getUserData(userId) {
     if (!userEconomy.has(userId)) {
@@ -104,8 +117,7 @@ async function callNvidiaAI(messages) {
     }
 }
 
-module.exports = { MEDIA, FISH_LIST, ANIME_LIST, getUserData, saveUserData, createBaseEmbed, callNvidiaAI };
-            const commands = [
+const commands = [
     { name: 'vi', description: 'Xem tài khoản và tài sản cá nhân' },
     { name: 'daily', description: 'Điểm danh nhận xu mỗi ngày' },
     { name: 'canca', description: 'Đi câu cá giải trí kiếm tiền' },
@@ -133,28 +145,6 @@ module.exports = { MEDIA, FISH_LIST, ANIME_LIST, getUserData, saveUserData, crea
         }]
     }
 ];
-
-module.exports = commands;
-const { Client, GatewayIntentBits, Partials, REST, Routes, Events } = require('discord.js');
-const http = require('http');
-const { MEDIA, FISH_LIST, ANIME_LIST, getUserData, saveUserData, createBaseEmbed, callNvidiaAI } = require('./config');
-const commands = require('./commands');
-
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ],
-    partials: [Partials.Channel, Partials.Message]
-});
-
-const aiChannels = new Set();
-const chatHistories = new Map();
-
-function isChannelEnabled(channelId) {
-    return aiChannels.has(channelId);
-}
 
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
@@ -315,7 +305,7 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 client.on(Events.MessageCreate, async message => {
-    if (message.author.bot || !isChannelEnabled(message.channelId)) return;
+    if (message.author.bot || !aiChannels.has(message.channelId)) return;
 
     try {
         await message.channel.sendTyping();
@@ -359,4 +349,4 @@ client.once(Events.ClientReady, async () => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-            
+                                          
