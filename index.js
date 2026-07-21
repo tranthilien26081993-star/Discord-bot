@@ -179,8 +179,8 @@ function handleEconomyAndLeveling(userId, message) {
   let eco = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null] };
   eco.balance += Math.floor(Math.random() * 41) + 10;
   userEconomy.set(userId, eco);
-      }
-  function startBot() {
+}
+function startBot() {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) return;
 
@@ -345,12 +345,12 @@ function handleEconomyAndLeveling(userId, message) {
           const pIdx = interaction.options.getInteger("oodat", true) - 1;
           const sId = interaction.options.getString("loaicay", true).toLowerCase();
           if (pIdx < 0 || pIdx >= ecoData.plots.length || ecoData.plots[pIdx] !== null) { 
-            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Ô đất không hợp lệ hoặc đang bận trồng cây khác!")] }, ephemeral: true); 
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Ô đất không hợp lệ hoặc đang bận trồng cây khác!")], ephemeral: true }); 
             return; 
           }
           const item = currentShopStock.find(s => s.id === sId);
           if (!item || item.stock <= 0 || ecoData.balance < item.cost) { 
-            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Hạt giống không có trong shop, đã hết hàng hoặc không đủ tiền mua!")] }, ephemeral: true); 
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Hạt giống không có trong shop, đã hết hàng hoặc không đủ tiền mua!")], ephemeral: true }); 
             return; 
           }
           item.stock--; 
@@ -364,7 +364,7 @@ function handleEconomyAndLeveling(userId, message) {
           const pIdx = interaction.options.getInteger("oodat", true) - 1;
           const p = ecoData.plots[pIdx];
           if (!p || Date.now() < p.harvestTime) { 
-            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Ô đất đang trống hoặc cây trồng chưa lớn để thu hoạch!")] }, ephemeral: true); 
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Ô đất đang trống hoặc cây trồng chưa lớn để thu hoạch!")], ephemeral: true }); 
             return; 
           }
           ecoData.balance += p.reward; 
@@ -499,4 +499,3 @@ function handleEconomyAndLeveling(userId, message) {
 }
 
 startBot();
-                                   
