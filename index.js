@@ -321,7 +321,100 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 if (eco.balance < bet) return interaction.reply({ content: `Bạn không đủ tiền! Số dư của bạn là: **${eco.balance} xu**.`, ephemeral: true });
 
                 const symbols = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
-         client.on(Events.MessageCreate, async (message) => {
+                const result = [ symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random() * symbols.length)] ];
+
+                let multiplier = 0;
+                if (result[0] === result[1] && result[1] === result[2]) multiplier = 5; 
+                else if (result[0] === result[1] || result[1] === result[2] || result[0] === result[2]) multiplier = 1.5; 
+
+                eco.balance -= bet; 
+                const winnings = Math.floor(bet * multiplier);
+                eco.balance += winnings;
+                saveUserData(userId, eco);
+
+                const embed = createBaseEmbed(
+                    multiplier > 0 ? 0xF1C40F : 0x95A5A6, 
+                    '🎰 SLOT MACHINE ĐANG QUAY... 🎰',
+                    `**[ ${result.join(' | ')} ]**\n\n${multiplier > 0 ? `🎉 Trúng mánh! Bạn nhận được **+${winnings.toLocaleString()} xu**!` : `😢 Mất trắng **${bet.toLocaleString()} xu** rồi bồ tèo.`}`,
+                    GIFS.slot
+                );
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+
+            case 'doananime': {
+                const character = ANIME_LIST[Math.floor(Math.random() * ANIME_LIST.length)];
+                await interaction.reply({ 
+                    embeds: [createBaseEmbed(
+                        0x9B59B6, 
+                        '🧠 MINIGAME WEEBU 100 NHÂN VẬT', 
+                        `**Gợi ý:** ${character.hint}\n\n⏱️ *Bạn có 15 giây để gõ tên nhân vật vào kênh này!*`,
+                        GIFS.anime
+                    )] 
+                });
+
+                try {
+                    const collected = await interaction.channel.awaitMessages({ filter: m => m.author.id === userId, max: 1, time: 15000, errors: ['time'] });
+                    const answer = collected.first().content.trim().toLowerCase();
+                    if (answer === character.name.toLowerCase()) {
+                        eco.balance += 300; saveUserData(userId, eco);
+                        await interaction.followUp({ content: `🎉 Chuẩn cmnr! Bổn cung thưởng cho bạn **+300 xu**. (Đáp án: **${character.name}**)` });
+                    } else {
+                        await interaction.followUp({ content: `❌ Sai bét rồi! Đáp án đúng là **${character.name}**.` });
+                    }
+                } catch (e) {
+                    await interaction.followUp({ content: `⏰ Hết 15 giây rồi! Đáp án là **${character.name}**.` });
+                }
+                break;
+            }
+
+            case 'nongtrai': {
+                const sub = interaction.options.getSubcommand();
+                if (sub === 'vuon') {
+                    let desc = '';
+                    eco.plots.forEach((plot, index) => {
+                        if (!plot) desc += `**Ô ${index + 1}:** Đất trống (Vào shop mua hạt giống)\n`;
+                        else {
+                            const timeToGrow = (plot.plantTime + plot.duration) - Date.now();
+                            if (timeToGrow <= 0) desc += `**Ô ${index + 1}:** ${plot.name} (Đã chín! Gõ /nongtrai thuhoach)\n`;
+                            else desc += `**Ô ${index + 1}:** ${plot.name} (Chín sau: ${Math.ceil(timeToGrow / 60000)} phút)\n`;
+                        }
+                    });
+                    await interaction.reply({ embeds: [createBaseEmbed(0x2ECC71, '🧑‍🌾 KHU VƯỜN CỦA BẠN', desc, GIFS.farm)] });
+                } else if (sub === 'thuhoach') {
+                    const plotIndex = interaction.options.getInteger('oodat') - 1; 
+                    if (plotIndex < 0 || plotIndex >= eco.plots.length) return interaction.reply({ content: 'Ô đất không tồn tại!', ephemeral: true });
+                    const plot = eco.plots[plotIndex];
+                    if (!plot) return interaction.reply({ content: 'Ô này đang bỏ hoang!', ephemeral: true });
+                    if (Date.now() < plot.plantTime + plot.duration) return interaction.reply({ content: 'Cây chưa chín bồ ơi, định ăn trái non à?', ephemeral: true });
+                    
+                    eco.balance += plot.profit;
+                    const profitText = plot.profit;
+                    const plantName = plot.name;
+                    eco.plots[plotIndex] = null; 
+                    saveUserData(userId, eco);
+                    await interaction.reply({ embeds: [createBaseEmbed(0xF1C40F, '🌾 THU HOẠCH THÀNH CÔNG', `Bạn thu hoạch **${plantName}** và bán vội được **+${profitText.toLocaleString()} xu**!`, GIFS.farm)] });
+                }
+                break;
+            }
+
+            case 'ai': {
+                if (interaction.options.getSubcommand() === 'on') {
+                    enableChannel(interaction.channelId);
+                    await interaction.reply({ embeds: [createBaseEmbed(0x57F287, '🤖 AI ONLINE', 'Đã bật AI mỏ hỗn lầy lội. Sẵn sàng trò chuyện!', GIFS.ai_on)] });
+                } else {
+                    disableChannel(interaction.channelId);
+                    await interaction.reply({ embeds: [createBaseEmbed(0xED4245, '💤 AI OFFLINE', 'Đã tắt AI và dọn dẹp bộ nhớ tạm.', GIFS.ai_off)] });
+                }
+                break;
+            }
+        }
+    } catch (e) {
+        logger.warn(e, `Lỗi lệnh ${interaction.commandName}`);
+        if (!interaction.replied) await interaction.reply({ content: 'Oops, hệ thống gặp chút sự cố nhỏ!', ephemeral: true });
+    }
+});
+client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     
     if (isChannelEnabled(message.channelId)) {
@@ -330,8 +423,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!chatHistories.has(message.channelId)) chatHistories.set(message.channelId, []);
         const history = chatHistories.get(message.channelId);
         
+        // Đưa Tên người dùng vào ngữ cảnh để AI xưng hô siêu tự nhiên
         history.push({ role: 'user', content: `[Thành viên: ${message.author.username}] nói: ${message.content}` });
         
+        // Giữ 8 câu gần nhất để nhớ dai hơn
         if (history.length > 8) history.shift();
         
         const reply = await callNvidiaAI(history);
@@ -357,8 +452,9 @@ client.once('ready', async () => {
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
-                import http from 'http';
+import http from 'http';
 
+// Mở một server HTTP nhỏ để đáp ứng yêu cầu PORT của Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -366,4 +462,6 @@ http.createServer((req, res) => {
 }).listen(PORT, () => {
     console.log(`Server HTTP dang chay tren port ${PORT}`);
 });
-                
+import http from 'http';
+
+
