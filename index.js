@@ -20,8 +20,8 @@ const logger = {
 };
 
 const enabledChannels = new Set();
-const userLevels = new Map(); // Lưu trữ XP/Level người dùng
-const userEconomy = new Map(); // Lưu trữ ví tiền: userId -> { balance, lastDaily }
+const userLevels = new Map();
+const userEconomy = new Map();
 
 function isChannelEnabled(channelId) { return enabledChannels.has(channelId); }
 function enableChannel(channelId) { enabledChannels.add(channelId); }
@@ -57,7 +57,6 @@ app.listen(PORT, () => {
   logger.info(`Express web server listening on port ${PORT}`);
 });
 
-// --- Thêm các lệnh kinh tế vào Slash Commands ---
 const commands = [
   new SlashCommandBuilder()
     .setName("ai")
@@ -174,21 +173,19 @@ async function sendReply(message, text) {
 }
 
 function handleEconomyAndLeveling(userId, message) {
-  // Xử lý Level
   let lvlData = userLevels.get(userId) || { xp: 0, level: 1 };
   lvlData.xp += Math.floor(Math.random() * 10) + 5;
   const neededXp = lvlData.level * 100;
   if (lvlData.xp >= neededXp) {
     lvlData.level += 1;
     lvlData.xp = 0;
-    message.channel.send(`🎉 kinh vãi, <@${userId>> vừa lên **cấp ${lvlData.level}** rồi đấy, thưởng nóng 500 xu!`);
+    message.channel.send(`🎉 kinh vãi, <@${userId}> vừa lên **cấp ${lvlData.level}** rồi đấy, thưởng nóng 500 xu!`);
     let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0 };
     ecoData.balance += 500;
     userEconomy.set(userId, ecoData);
   }
   userLevels.set(userId, lvlData);
 
-  // Xử lý thưởng xu ngẫu nhiên khi chat (từ 10 đến 50 xu mỗi tin nhắn)
   let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0 };
   const earned = Math.floor(Math.random() * 41) + 10;
   ecoData.balance += earned;
@@ -245,7 +242,7 @@ function startBot() {
       }
       if (interaction.commandName === "diemdanh") {
         const now = Date.now();
-        const cooldown = 24 * 60 * 60 * 1000; // 24 giờ
+        const cooldown = 24 * 60 * 60 * 1000;
         if (now - ecoData.lastDaily < cooldown) {
           const remaining = Math.ceil((cooldown - (now - ecoData.lastDaily)) / (1000 * 60 * 60));
           await interaction.reply({ content: `⏳ đói rách vừa thôi, hôm nay điểm danh rồi, đợi thêm khoảng **${remaining} tiếng** nữa mới nhận tiếp nhé!`, ephemeral: true });
@@ -324,7 +321,7 @@ function startBot() {
           { role: "user", content: "Hãy bói một quẻ tarot ngắn gọn, cực kỳ lầy lội và phũ phàng về vận mệnh tình duyên, tiền tài cho tôi hôm nay." }
         ];
         const result = await callNvidiaAI(tarotPrompts);
-        await interaction.editReply({ content: `🔮 **quẻ tarot hômNaOMe của mày:**\n${result}` });
+        await interaction.editReply({ content: `🔮 **quẻ tarot hôm nay của mày:**\n${result}` });
         return;
       }
       if (interaction.commandName === "dice") {
@@ -347,7 +344,6 @@ function startBot() {
     const isDM = message.channel.type === ChannelType.DM;
     if (!isDM && !isChannelEnabled(message.channelId)) return;
 
-    // Tự động cộng xu và kinh nghiệm khi chat
     handleEconomyAndLeveling(message.author.id, message);
 
     logger.info({ author: message.author.tag, content: message.content }, "Message received");
@@ -368,4 +364,4 @@ function startBot() {
 }
 
 startBot();
-                                          
+                             
