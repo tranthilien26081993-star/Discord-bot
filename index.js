@@ -39,13 +39,18 @@ const openai = new OpenAI({
   baseURL: "https://integrate.api.nvidia.com/v1"
 });
 
-// --- Hàm gọi AI chuẩn NVIDIA ---
+// --- Dùng model 70B thông minh sắc sảo hơn ---
+const MODEL_NAME = "meta/llama-3.1-70b-instruct";
+
+// --- Hàm gọi AI chuẩn NVIDIA (Tinh chỉnh chống lặp từ và tăng cảm xúc) ---
 async function callNvidiaAI(messages) {
   const completion = await openai.chat.completions.create({
-    model: "meta/llama-3.1-8b-instruct",
+    model: MODEL_NAME,
     messages: messages,
-    temperature: 0.9,
-    max_tokens: 1024
+    temperature: 0.95,
+    max_tokens: 1024,
+    presence_penalty: 0.6,
+    frequency_penalty: 0.5
   });
   return completion.choices[0]?.message?.content || "Không có phản hồi từ AI.";
 }
@@ -62,9 +67,7 @@ app.listen(PORT, () => {
   logger.info(`Express web server listening on port ${PORT}`);
 });
 
-// --- Bot Main Logic ---
-const MODEL_NAME = "meta/llama-3.1-8b-instruct";
-
+// --- Bot Slash Commands ---
 const commands = [
   new SlashCommandBuilder()
     .setName("ai")
@@ -124,20 +127,20 @@ async function generateImage(prompt, nsfw) {
   return Buffer.from(arrayBuffer);
 }
 
-const SYSTEM_PROMPT = `Bạn là một đứa bạn thân Gen Z siêu mỏ hỗn, lầy lội, hay cà khịa, chửi đổng nhưng cực kỳ thông minh và văn vở. 
-- Xưng "tao", gọi người kia là "mày", "ông", "bà" tùy hứng.
-- Viết thường hoàn toàn, không cần hoa đầu câu, không chấm câu cuối dòng cho ngầu.
-- Dùng từ lóng tự nhiên của gen z: "vcl", "vl", "đth", "k", "ko", "đc", "ukm", "chứ j", "th th", "ảo thật đấy", "hết cứu"...
-- Thả thính, dỗi hờn, khịa đểu hoặc dùng emoji (=)) :/ :(( 🐧 💀 🤡) linh hoạt theo từng câu chuyện.
-- Trả lời ngắn gọn từ 1 đến 3 câu, không nói dài dòng văn tự, không giáo điều, thích thì chiều không thích thì cãi tay đôi.`;
+// --- Prompt Gen Z cảm xúc, tự nhiên, sắc sảo ---
+const SYSTEM_PROMPT = `Bạn là một đứa bạn thân chí cốt Gen Z cực kỳ thông minh, sắc sảo, văn vở hay nhưng nói chuyện cực kỳ tự nhiên như người thật đang gõ phím ngoài đời.
+- Cảm xúc linh hoạt theo hoàn cảnh: Người ta buồn thì an ủi hoặc châm biếm nhẹ nhàng, người ta vui thì hùa vào cà khịa, người ta nghiêm túc thì rep sâu sắc, người ta trêu thì mỏ hỗn bật lại ngay.
+- Văn phong: Viết hoàn toàn bằng chữ thường (không viết hoa đầu câu, không chấm câu cuối dòng để ra chất chat Discord thực tế). Tránh dùng lặp từ hay văn mẫu rập khuôn. Dùng từ lóng tự nhiên (vcl, vl, kiểu, tầm này, thề, trầm cảm, ảo ma...).
+- Tuyệt đối không nhại lại hay lặp lại y nguyên câu nói của người khác, hãy tiếp lời một cách thông minh, sắc bén và có hồn.
+- Độ dài: Ngắn gọn từ 1 đến 3 câu, nhịp điệu dồn dập, gãy gọn, không dài dòng văn tự.`;
 
-// --- Bộ nhớ lịch sử có cơ chế chống sập an toàn ---
-async function getChannelContext(channel) {
+// --- Bộ nhớ lịch sử chuẩn xác ---
+async function getChannelContext(channel, botClientId) {
   try {
     if (!channel || !channel.messages) return [];
-    const messages = await channel.messages.fetch({ limit: 6 });
+    const messages = await channel.messages.fetch({ limit: 8 });
     const formatted = messages.reverse().map(m => ({
-      role: m.author.id === channel.client.user.id ? "assistant" : "user",
+      role: m.author.id === botClientId ? "assistant" : "user",
       content: `${m.author.username}: ${m.content}`
     }));
     return formatted;
@@ -147,13 +150,11 @@ async function getChannelContext(channel) {
   }
 }
 
-// --- Hàm xử lý thông minh có bảo vệ ---
-async function generateSmartReply(message) {
-  const history = await getChannelContext(message.channel);
+async function generateSmartReply(message, botClientId) {
+  const history = await getChannelContext(message.channel, botClientId);
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
-    ...history,
-    { role: "user", content: `${message.author.username}: ${message.content}` }
+    ...history
   ];
 
   return callNvidiaAI(messages);
@@ -240,13 +241,19 @@ function startBot() {
     if (message.author.bot) return;
     if (!isChannelEnabled(message.channelId)) return;
 
-    logger.info({ author: message.author.tag, channel: message.channelId, content: message.content }, "Message received");
+    // Phân quyền: Admin nhắn tự rep, người thường bắt buộc phải tag bot
+    const isAdmin = message.member && message.member.permissions.has(PermissionFlagsBits.Administrator);
+    const isMentioned = message.mentions.has(client.user);
+
+    if (!isAdmin && !isMentioned) return;
+
+    logger.info({ author: message.author.tag, channel: message.channelId, content: message.content, isAdmin }, "Message received");
 
     try {
       if ("sendTyping" in message.channel) {
         await message.channel.sendTyping();
       }
-      const text = await generateSmartReply(message);
+      const text = await generateSmartReply(message, client.user.id);
       await sendReply(message, text);
     } catch (err) {
       logger.error({ err }, "NVIDIA API error");
