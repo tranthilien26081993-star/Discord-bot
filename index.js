@@ -67,22 +67,26 @@ const openai = new OpenAI({
 const MODEL_NAME = "meta/llama-3.1-70b-instruct";
 
 async function callNvidiaAI(messages) {
-  const completion = await openai.chat.completions.create({
-    model: MODEL_NAME,
-    messages: messages,
-    temperature: 0.95,
-    max_tokens: 512,
-    presence_penalty: 0.8,
-    frequency_penalty: 0.6
-  });
-  return completion.choices[0]?.message?.content || "gì đấy nói lại xem";
+  try {
+    const completion = await openai.chat.completions.create({
+      model: MODEL_NAME,
+      messages: messages,
+      temperature: 0.95,
+      max_tokens: 512,
+      presence_penalty: 0.8,
+      frequency_penalty: 0.6
+    });
+    return completion.choices[0]?.message?.content || "gì đấy nói lại xem";
+  } catch (err) {
+    return "hệ thống AI đang bận chút, thử lại sau nhé!";
+  }
 }
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Grow a Garden Shop System Bot is running 24/7!");
+  res.send("Bot is running smoothly 24/7 with stunning animations!");
 });
 
 app.listen(PORT, () => {
@@ -94,40 +98,45 @@ const commands = [
     .addSubcommand((sub) => sub.setName("on").setDescription("Bật AI tự động"))
     .addSubcommand((sub) => sub.setName("off").setDescription("Tắt AI tự động"))
     .addSubcommand((sub) => sub.setName("status").setDescription("Xem trạng thái")),
-  new SlashCommandBuilder().setName("imagine").setDescription("Tạo ảnh AI từ mô tả")
-    .addStringOption((opt) => opt.setName("prompt").setDescription("Mô tả ảnh").setRequired(true))
+  new SlashCommandBuilder().setName("imagine").setDescription("Tạo ảnh AI từ mô tả cực nét")
+    .addStringOption((opt) => opt.setName("prompt").setDescription("Mô tả bức ảnh").setRequired(true))
     .addBooleanOption((opt) => opt.setName("nsfw").setDescription("Bật cờ NSFW").setRequired(false)),
-  new SlashCommandBuilder().setName("summary").setDescription("Tóm tắt nhanh các tin nhắn gần đây trong kênh"),
-  new SlashCommandBuilder().setName("rank").setDescription("Xem cấp độ (Level) và XP chat của bạn"),
-  new SlashCommandBuilder().setName("vi").setDescription("Kiểm tra số dư xu và nông trại của bạn"),
+  new SlashCommandBuilder().setName("summary").setDescription("Tóm tắt nhanh các tin nhắn gần đây"),
+  new SlashCommandBuilder().setName("rank").setDescription("Xem cấp độ (Level) và XP của bạn"),
+  new SlashCommandBuilder().setName("vi").setDescription("Kiểm tra ví tiền và nông trại"),
   new SlashCommandBuilder().setName("diemdanh").setDescription("Điểm danh nhận xu hàng ngày"),
   new SlashCommandBuilder().setName("coinflip").setDescription("Chơi tung đồng xu cược xu")
     .addStringOption((opt) => opt.setName("chon").setDescription("Chọn mặt").setRequired(true)
       .addChoices({ name: "Mặt Ngửa", value: "ngua" }, { name: "Mặt Sấp", value: "sap" }))
-    .addIntegerOption((opt) => opt.setName("sotien").setDescription("Số lượng xu").setRequired(true)),
-  new SlashCommandBuilder().setName("taixiu").setDescription("Chơi minigame Tài Xỉu")
+    .addIntegerOption((opt) => opt.setName("sotien").setDescription("Số lượng xu cược").setRequired(true)),
+  new SlashCommandBuilder().setName("taixiu").setDescription("Chơi minigame Tài Xỉu hiệu ứng xịn")
     .addStringOption((opt) => opt.setName("chon").setDescription("Chọn Tài/Xỉu").setRequired(true)
       .addChoices({ name: "Tài", value: "tai" }, { name: "Xỉu", value: "xiu" }))
-    .addIntegerOption((opt) => opt.setName("sotien").setDescription("Số lượng xu").setRequired(true)),
-  new SlashCommandBuilder().setName("doanso").setDescription("Đoán số may mắn").addIntegerOption((opt) => opt.setName("so").setDescription("1-100").setRequired(true)),
-  new SlashCommandBuilder().setName("doananime").setDescription("Đoán tên nhân vật Anime"),
-  new SlashCommandBuilder().setName("shop").setDescription("Xem cửa hàng hạt giống"),
-  new SlashCommandBuilder().setName("nongtrai").setDescription("Hệ thống nông trại Roblox")
-    .addSubcommand((sub) => sub.setName("vuon").setDescription("Xem vườn"))
-    .addSubcommand((sub) => sub.setName("trong").setDescription("Trồng cây")
-      .addIntegerOption((opt) => opt.setName("oodat").setDescription("Ô đất").setRequired(true))
-      .addStringOption((opt) => opt.setName("loaicay").setDescription("ID cây").setRequired(true)))
-    .addSubcommand((sub) => sub.setName("thuhoach").setDescription("Thu hoạch").addIntegerOption((opt) => opt.setName("oodat").setDescription("Ô đất").setRequired(true)))
-    .addSubcommand((sub) => sub.setName("muadat").setDescription("Mở rộng đất")),
-  new SlashCommandBuilder().setName("buitarot").setDescription("Bói Tarot"),
-  new SlashCommandBuilder().setName("dice").setDescription("Đổ xí ngầu"),
+    .addIntegerOption((opt) => opt.setName("sotien").setDescription("Số lượng xu cược").setRequired(true)),
+  new SlashCommandBuilder().setName("doanso").setDescription("Đoán số may mắn từ 1 đến 100")
+    .addIntegerOption((opt) => opt.setName("so").setDescription("Nhập số của bạn").setRequired(true)),
+  new SlashCommandBuilder().setName("doananime").setDescription("Minigame đoán tên nhân vật Anime siêu vui"),
+  new SlashCommandBuilder().setName("shop").setDescription("Xem cửa hàng hạt giống nông trại"),
+  new SlashCommandBuilder().setName("nongtrai").setDescription("Hệ thống quản lý nông trại Roblox")
+    .addSubcommand((sub) => sub.setName("vuon").setDescription("Xem khu vườn của bạn"))
+    .addSubcommand((sub) => sub.setName("trong").setDescription("Trồng hạt giống")
+      .addIntegerOption((opt) => opt.setName("oodat").setDescription("Số thứ tự ô đất").setRequired(true))
+      .addStringOption((opt) => opt.setName("loaicay").setDescription("ID hạt giống").setRequired(true)))
+    .addSubcommand((sub) => sub.setName("thuhoach").setDescription("Thu hoạch cây trồng")
+      .addIntegerOption((opt) => opt.setName("oodat").setDescription("Số thứ tự ô đất").setRequired(true)))
+    .addSubcommand((sub) => sub.setName("muadat").setDescription("Mở rộng thêm ô đất (2000 xu)")),
+  new SlashCommandBuilder().setName("buitarot").setDescription("Bói bài Tarot định mệnh"),
+  new SlashCommandBuilder().setName("dice").setDescription("Đổ xúc xắc giải trí"),
 ].map((cmd) => cmd.toJSON());
 
 async function registerSlashCommands(clientId, token) {
   const rest = new REST({ version: "10" }).setToken(token);
   try {
     await rest.put(Routes.applicationCommands(clientId), { body: commands });
-  } catch (err) {}
+    logger.info("Đăng ký thành công toàn bộ Slash Commands lên Discord!");
+  } catch (err) {
+    logger.error("Lỗi đăng ký lệnh:", err);
+  }
 }
 
 async function generateImage(prompt, nsfw) {
@@ -169,7 +178,7 @@ function handleEconomyAndLeveling(userId, message) {
   if (lvlData.xp >= lvlData.level * 100) {
     lvlData.level += 1;
     lvlData.xp = 0;
-    const embed = new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 <@${userId}> vừa lên **cấp ${lvlData.level}**, thưởng nóng 500 xu!`);
+    const embed = new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 Chúc mừng <@${userId}> đã thăng hạng lên **cấp ${lvlData.level}**, nhận ngay 500 xu thưởng nóng!`);
     message.channel.send({ embeds: [embed] });
     let eco = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null] };
     eco.balance += 500;
@@ -190,8 +199,9 @@ function startBot() {
   });
 
   client.once(Events.ClientReady, (readyClient) => {
-    readyClient.user.setPresence({ status: "online", activities: [{ name: "Grow a Garden Shop 🌱", type: ActivityType.Custom }] });
+    readyClient.user.setPresence({ status: "online", activities: [{ name: "Grow a Garden & Minigames 🌱", type: ActivityType.Custom }] });
     registerSlashCommands(readyClient.user.id, token);
+    logger.info(`Bot đã đăng nhập thành công với tên ${readyClient.user.tag}`);
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -203,31 +213,38 @@ function startBot() {
     try {
       if (interaction.commandName === "ai") {
         const sub = interaction.options.getSubcommand();
-        if (sub === "on") { enableChannel(interaction.channelId); await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription("🟢 Đã bật AI tự động trò chuyện trong kênh này!")] }); }
-        else if (sub === "off") { disableChannel(interaction.channelId); await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("🔴 Đã tắt AI tự động trong kênh này!")] }); }
-        else { 
+        if (sub === "on") { 
+          enableChannel(interaction.channelId); 
+          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription("🟢 Đã bật chế độ AI tự động trò chuyện trong kênh này (Cần tag bot để trò chuyện)!")] }); 
+        } else if (sub === "off") { 
+          disableChannel(interaction.channelId); 
+          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("🔴 Đã tắt chế độ AI tự động trong kênh này!")] }); 
+        } else { 
           const embed = new EmbedBuilder().setColor(0x00AE86).setDescription(`🤖 Trạng thái AI tại kênh này đang: **${isChannelEnabled(interaction.channelId) ? "BẬT 🟢" : "TẮT 🔴"}**`);
           await interaction.reply({ embeds: [embed] }); 
         }
         return;
       }
+
       if (interaction.commandName === "vi") {
         const embed = new EmbedBuilder()
           .setColor(0x5865F2)
           .setTitle("💰 VÍ TIỀN & NÔNG TRẠI CỦA BẠN")
           .addFields(
-            { name: "💵 Số dư", value: `\`${ecoData.balance} xu\``, inline: true },
-            { name: "🔥 Chuỗi điểm danh", value: `\`${ecoData.streak} ngày\``, inline: true },
-            { name: "🌾 Số ô đất", value: `\`${ecoData.plots.length} ô\``, inline: true }
-          );
+            { name: "💵 Số dư", value: `\`${ecoData.balance.toLocaleString()} xu\``, inline: true },
+            { name: "🔥 Điểm danh liên tiếp", value: `\`${ecoData.streak} ngày\``, inline: true },
+            { name: "🌾 Tổng số ô đất", value: `\`${ecoData.plots.length} ô\``, inline: true }
+          )
+          .setTimestamp();
         await interaction.reply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "diemdanh") {
         const now = Date.now();
         if (ecoData.lastDaily && now - ecoData.lastDaily < 20 * 60 * 60 * 1000) {
           const remain = ((20 * 60 * 60 * 1000 - (now - ecoData.lastDaily)) / 3600000).toFixed(1);
-          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription(`⏳ Đói rách vừa thôi, chưa đủ 20 tiếng đâu! Đợi khoảng **${remain} tiếng** nữa nhé!`)], ephemeral: true });
+          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription(`⏳ Bạn đã điểm danh rồi! Hãy quay lại sau khoảng **${remain} tiếng** nữa nhé.`)], ephemeral: true });
           return;
         }
         ecoData.streak = (ecoData.lastDaily && now - ecoData.lastDaily <= 40 * 60 * 60 * 1000) ? ecoData.streak + 1 : 1;
@@ -239,20 +256,23 @@ function startBot() {
         const embed = new EmbedBuilder()
           .setColor(0x00FF00)
           .setTitle("🎁 ĐIỂM DANH THÀNH CÔNG")
-          .setDescription(`Nhận ngay **+${reward} xu** vào ví!\n🔥 Chuỗi điểm danh liên tiếp: **${ecoData.streak} ngày**\n💰 Tổng ví hiện tại: **${ecoData.balance} xu**`);
+          .setDescription(`Nhận ngay **+${reward.toLocaleString()} xu** vào ví!\n🔥 Chuỗi điểm danh: **${ecoData.streak} ngày**\n💰 Tổng ví hiện tại: **${ecoData.balance.toLocaleString()} xu**`);
         await interaction.reply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "coinflip") {
         const choice = interaction.options.getString("chon", true);
         const amount = interaction.options.getInteger("sotien", true);
         if (amount <= 0 || ecoData.balance < amount) { 
-          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription(`❌ Không đủ tiền cược! Ví mày chỉ có **${ecoData.balance} xu** thôi.`)], ephemeral: true }); 
+          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription(`❌ Số tiền cược không hợp lệ hoặc ví không đủ! Ví bạn chỉ có **${ecoData.balance.toLocaleString()} xu** thôi.`)], ephemeral: true }); 
           return; 
         }
 
-        await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xF1C40F).setTitle("🪙 TUNG ĐỒNG XU").setDescription("🪙 Đang tung đồng xu lên không trung... 🌀 💫")] });
-        await new Promise(r => setTimeout(r, 1500));
+        await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xF1C40F).setTitle("🪙 TUNG ĐỒNG XU").setDescription("🪙 Đang tung đồng xu lên không trung...\n🔄 `[ ● ○ ○ ]`")] });
+        await new Promise(r => setTimeout(r, 800));
+        await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xF1C40F).setTitle("🪙 TUNG ĐỒNG XU").setDescription("🪙 Đồng xu đang xoay tít...\n🔄 `[ ○ ● ○ ]`")] });
+        await new Promise(r => setTimeout(r, 800));
 
         const res = Math.random() < 0.5 ? "ngua" : "sap";
         const win = (choice === res);
@@ -262,20 +282,23 @@ function startBot() {
         const embed = new EmbedBuilder()
           .setColor(win ? 0x00FF00 : 0xFF0000)
           .setTitle("🪙 KẾT QUẢ TUNG ĐỒNG XU")
-          .setDescription(`Đồng xu quay ra mặt: **${res.toUpperCase()}**\n${win ? `🎉 Mày đoán trúng và húp **+${amount} xu**!` : `💀 Mày đoán sai và mất **-${amount} xu**!`}\n💰 Tổng ví: **${ecoData.balance} xu**`);
+          .setDescription(`Đồng xu rơi xuống lộ diện mặt: **${res.toUpperCase()}**\n${win ? `🎉 Bạn đoán chuẩn xác và húp trọn **+${amount.toLocaleString()} xu**!` : `💀 Rất tiếc, bạn đoán sai và mất **-${amount.toLocaleString()} xu**!`}\n💰 Số dư ví: **${ecoData.balance.toLocaleString()} xu**`);
         await interaction.editReply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "taixiu") {
         const choice = interaction.options.getString("chon", true);
         const amount = interaction.options.getInteger("sotien", true);
         if (amount <= 0 || ecoData.balance < amount) { 
-          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription(`❌ Không đủ tiền cược tài xỉu! Ví mày chỉ có **${ecoData.balance} xu**.`)], ephemeral: true }); 
+          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription(`❌ Không đủ tiền cược! Ví bạn chỉ có **${ecoData.balance.toLocaleString()} xu**.`)], ephemeral: true }); 
           return; 
         }
 
-        await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xF1C40F).setTitle("🎲 LẮC TÀI XỈU").setDescription("🎲 Đang lắc ống xúc xắc... ⚪ ⚫ 🔴 🎲")] });
-        await new Promise(r => setTimeout(r, 1800));
+        await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xF1C40F).setTitle("🎲 LẮC TÀI XỈU").setDescription("🎲 Đang lắc ống xúc xắc...\n🎲 `[ ⚀ ][ ⚁ ][ ⚂ ]`")] });
+        await new Promise(r => setTimeout(r, 900));
+        await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xF1C40F).setTitle("🎲 LẮC TÀI XỈU").setDescription("🎲 Xúc xắc đang nhảy múa trên bàn...\n🎲 `[ ⚃ ][ ⚄ ][ ⚅ ]`")] });
+        await new Promise(r => setTimeout(r, 900));
 
         const d1 = Math.floor(Math.random() * 6) + 1, d2 = Math.floor(Math.random() * 6) + 1, d3 = Math.floor(Math.random() * 6) + 1;
         const total = d1 + d2 + d3, ketqua = total >= 11 ? "tai" : "xiu";
@@ -286,10 +309,11 @@ function startBot() {
         const embed = new EmbedBuilder()
           .setColor(win ? 0x00FF00 : 0xFF0000)
           .setTitle("🎲 KẾT QUẢ TÀI XỈU")
-          .setDescription(`Xúc xắc: **[${d1}] [${d2}] [${d3}]** = **${total} điểm (${ketqua.toUpperCase()})**\n${win ? `🎉 Chúc mừng, mày ăn **+${amount} xu**!` : `💀 Chia buồn, mày thua **-${amount} xu**!`}\n💰 Tổng ví: **${ecoData.balance} xu**`);
+          .setDescription(`Kết quả xúc xắc: **[${d1}] [${d2}] [${d3}]** = **${total} điểm (${ketqua.toUpperCase()})**\n${win ? `🎉 Chúc mừng bạn ăn lớn **+${amount.toLocaleString()} xu**!` : `💀 Chia buồn, bạn thua cược **-${amount.toLocaleString()} xu**!`}\n💰 Tổng ví: **${ecoData.balance.toLocaleString()} xu**`);
         await interaction.editReply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "shop") {
         const timeLeftMs = RESTOCK_INTERVAL - (Date.now() - lastRestockTime);
         const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60));
@@ -298,27 +322,28 @@ function startBot() {
         const embed = new EmbedBuilder()
           .setColor(0xF1C40F)
           .setTitle("🛒 CỬA HÀNG HẠT GIỐNG NÔNG TRẠI")
-          .setDescription(`⏳ Shop sẽ tự động đổi hàng sau: **${hoursLeft} giờ ${minsLeft} phút nữa**\n`);
+          .setDescription(`⏳ Shop sẽ tự động làm mới sau: **${hoursLeft} giờ ${minsLeft} phút**\n`);
 
         currentShopStock.forEach(i => {
           embed.addFields({
             name: `${i.name} (\`ID: ${i.id}\`)`,
-            value: `• Độ hiếm: \`${i.rarity}\`\n• Giá mua: **${i.cost} xu** | Lãi: **${i.profit} xu** (${i.duration / 60000}p)\n• Kho còn: **${i.stock} hạt**`,
+            value: `• Độ hiếm: \`${i.rarity}\`\n• Giá mua: **${i.cost.toLocaleString()} xu** | Lãi: **${i.profit.toLocaleString()} xu** (${i.duration / 60000} phút)\n• Kho còn lại: **${i.stock} hạt**`,
             inline: false
           });
         });
-        embed.setFooter({ text: "Dùng lệnh /nongtrai trong [ô] [id] để mua và trồng!" });
+        embed.setFooter({ text: "Dùng lệnh /nongtrai trong [ô] [id] để mua và trồng ngay!" });
         await interaction.reply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "nongtrai") {
         const sub = interaction.options.getSubcommand();
         if (sub === "vuon") {
-          const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle("🏡 NÔNG TRẠI ROBLOX CỦA MÀY");
+          const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle("🏡 KHU VƯỜN NÔNG TRẠI CỦA BẠN");
           let desc = "";
           ecoData.plots.forEach((p, idx) => {
             if (!p) {
-              desc += `🔹 **Ô đất #${idx + 1}**: Trống trơn (Sẵn sàng trồng)\n`;
+              desc += `🔹 **Ô đất #${idx + 1}**: Trống (Sẵn sàng gieo trồng)\n`;
             } else if (Date.now() >= p.harvestTime) {
               desc += `🌸 **Ô đất #${idx + 1}**: **${p.name}** ➔ **ĐÃ CHÍN, THU HOẠCH NGAY!**\n`;
             } else {
@@ -332,25 +357,25 @@ function startBot() {
         }
         if (sub === "muadat") {
           if (ecoData.balance < 2000 || ecoData.plots.length >= 6) { 
-            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Không đủ 2000 xu hoặc nông trại đã đạt tối đa 6 ô đất!")], ephemeral: true }); 
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Không đủ 2000 xu hoặc nông trại đã đạt tối đa 6 ô đất")], ephemeral: true }); 
             return; 
           }
           ecoData.balance -= 2000; 
           ecoData.plots.push(null);
           userEconomy.set(userId, ecoData);
-          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 Mở rộng đất thành công! Nông trại của mày giờ có **${ecoData.plots.length} ô đất**.`)] });
+          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 Mở rộng đất thành công! Nông trại của bạn giờ sở hữu **${ecoData.plots.length} ô đất**.`)] });
           return;
         }
         if (sub === "trong") {
           const pIdx = interaction.options.getInteger("oodat", true) - 1;
           const sId = interaction.options.getString("loaicay", true).toLowerCase();
           if (pIdx < 0 || pIdx >= ecoData.plots.length || ecoData.plots[pIdx] !== null) { 
-            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Ô đất không hợp lệ hoặc đang bận trồng cây khác!")], ephemeral: true }); 
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Ô đất không hợp lệ hoặc đang có cây trồng khác!")], ephemeral: true }); 
             return; 
           }
           const item = currentShopStock.find(s => s.id === sId);
           if (!item || item.stock <= 0 || ecoData.balance < item.cost) { 
-            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Hạt giống không có trong shop, đã hết hàng hoặc không đủ tiền mua!")], ephemeral: true }); 
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Hạt giống không có trong shop, đã hết hàng hoặc bạn không đủ xu!")], ephemeral: true }); 
             return; 
           }
           item.stock--; 
@@ -371,31 +396,34 @@ function startBot() {
           const name = p.name;
           ecoData.plots[pIdx] = null;
           userEconomy.set(userId, ecoData);
-          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 Thu hoạch thành công **${name}** ở ô đất **#${pIdx + 1}**! Bỏ túi **+${p.reward} xu**.`)] });
+          await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 Thu hoạch thành công **${name}** tại ô đất **#${pIdx + 1}**! Bỏ túi **+${p.reward.toLocaleString()} xu**.`)] });
           return;
         }
         return;
       }
+
       if (interaction.commandName === "doananime") {
         await interaction.deferReply();
-        let sel = { name: "Monkey D. Luffy", hint: "Thuyền trưởng mũ rơm, ăn trái ác quỷ cao su" };
-        try {
-          const res = await callNvidiaAI([
-            { role: "system", content: "Chọn 1 nhân vật anime. Trả về đúng JSON: {\"name\": \"...\", \"hint\": \"...\"}" }, 
-            { role: "user", content: "Chọn đi" }
-          ]);
-          sel = JSON.parse(res.match(/\{[\s\S]*\}/)[0]);
-        } catch(e) {}
+        const ANIME_LIST = [
+          { name: "Monkey D. Luffy", hint: "Thuyền trưởng mũ rơm, thích ăn thịt và có ước mơ làm Vua Hải Tặc" },
+          { name: "Naruto Uzumaki", hint: "Ninja làng Lá, có Cửu Vĩ bên trong và miệng hô 'Dattebayo'" },
+          { name: "Son Goku", hint: "Người Saiyan nuôi dưỡng ở Trái Đất, thích tỉ thí võ công" },
+          { name: "Tanjiro Kamado", hint: "Thợ săn quỷ có vết sẹo trên trán, luôn mang theo em gái hóa quỷ" },
+          { name: "Gojo Satoru", hint: "Thầy giáo tóc trắng mắt xanh mạnh nhất chú thuật hội" },
+          { name: "Sasuke Uchiha", hint: "Thiên tài tộc Uchiha, sở hữu đôi mắt Sharingan" },
+          { name: "Zoro Roronoa", hint: "Kiếm sĩ phái tam kiếm, nổi tiếng với kỹ năng 'mù đường'" }
+        ];
+        const sel = ANIME_LIST[Math.floor(Math.random() * ANIME_LIST.length)];
         
         const embed = new EmbedBuilder()
           .setColor(0xE67E22)
           .setTitle("🎮 ĐOÁN TÊN NHÂN VẬT ANIME")
-          .setDescription(`💡 **Gợi ý:** *${sel.hint}*\n\n👉 Chat ngay tên nhân vật bằng tiếng Anh hoặc Romaji vào kênh trong **30 giây** để nhận **1000 xu**!`);
+          .setDescription(`💡 **Gợi ý:** *${sel.hint}*\n\n👉 Chat nhanh tên nhân vật vào kênh trong **30 giây** để nhận **1,000 xu** thưởng!`);
         await interaction.editReply({ embeds: [embed] });
 
         try {
           const collected = await interaction.channel.awaitMessages({ 
-            filter: m => !m.author.bot && m.content.toLowerCase().includes(sel.name.toLowerCase().split(" ")[0]), 
+            filter: m => !m.author.bot && sel.name.toLowerCase().split(" ").some(part => m.content.toLowerCase().includes(part)), 
             max: 1, 
             time: 30000, 
             errors: ['time'] 
@@ -405,12 +433,13 @@ function startBot() {
           wEco.balance += 1000; 
           userEconomy.set(winnerId, wEco);
 
-          await interaction.channel.send({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 Chính xác! Nhân vật đó là **${sel.name}**.\n🏆 Xin chúc mừng <@${winnerId}> đã húp trọn **+1000 xu**!`)] });
+          await interaction.channel.send({ embeds: [new EmbedBuilder().setColor(0x00FF00).setDescription(`🎉 Chính xác! Nhân vật đó là **${sel.name}**.\n🏆 Xin chúc mừng <@${winnerId}> đã húp trọn **+1,000 xu**!`)] });
         } catch(e) { 
           await interaction.channel.send({ embeds: [new EmbedBuilder().setColor(0x95A5A6).setDescription(`⏰ Hết giờ rồi! Không ai đoán đúng đáp án **${sel.name}** cả.`)] }); 
         }
         return;
       }
+
       if (interaction.commandName === "imagine") {
         const prompt = interaction.options.getString("prompt", true);
         const nsfw = interaction.options.getBoolean("nsfw") ?? false;
@@ -421,10 +450,11 @@ function startBot() {
           const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle("🎨 TẠO ẢNH AI THÀNH CÔNG").setImage("attachment://imagine.png");
           await interaction.editReply({ embeds: [embed], files: [attachment] });
         } catch(e) { 
-          await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("⚠️ Không tạo được ảnh (Có thể do bộ lọc an toàn chặn từ khóa NSFW hoặc lỗi mạng).")] }); 
+          await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("⚠️ Không thể tạo ảnh (Có thể do bộ lọc an toàn hoặc đường truyền mạng bận).")] }); 
         }
         return;
       }
+
       if (interaction.commandName === "summary") {
         await interaction.deferReply();
         const msgs = await interaction.channel.messages.fetch({ limit: 25 });
@@ -437,12 +467,14 @@ function startBot() {
         await interaction.editReply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "rank") {
         const d = userLevels.get(userId) || { xp: 0, level: 1 };
-        const embed = new EmbedBuilder().setColor(0xE91E63).setTitle("📊 CẤP ĐỘ CỦA BẠN").setDescription(`• **Level:** \`${d.level}\`\n• **XP hiện tại:** \`${d.xp} / ${d.level * 100} XP\``);
+        const embed = new EmbedBuilder().setColor(0xE91E63).setTitle("📊 CẤP ĐỘ CỦA BẠN").setDescription(`• **Level hiện tại:** \`${d.level}\`\n• **Điểm XP:** \`${d.xp} / ${d.level * 100} XP\``);
         await interaction.reply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "doanso") {
         const userNum = interaction.options.getInteger("so", true);
         const secret = Math.floor(Math.random() * 100) + 1;
@@ -454,48 +486,71 @@ function startBot() {
         const embed = new EmbedBuilder()
           .setColor(win ? 0x00FF00 : 0xFF0000)
           .setTitle("🎯 MINIGAME ĐOÁN SỐ")
-          .setDescription(`Số bí mật là: **${secret}**\n${win ? "🎉 Vãi chưởng, mày đoán chuẩn xác số, thưởng nóng **+5000 xu**!" : "😢 Tạch rồi em ơi, đoán lệch mất rồi!"}`);
+          .setDescription(`Con số bí mật là: **${secret}**\n${win ? "🎉 Quá đỉnh, bạn đã đoán chuẩn xác con số và nhận thưởng **+5,000 xu**!" : "😢 Rất tiếc, bạn đoán lệch mất rồi, thử lại lần sau nhé!"}`);
         await interaction.reply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "buitarot") {
         await interaction.deferReply();
-        const res = await callNvidiaAI([
-          { role: "system", content: "Thầy bói tarot mỏ hỗn, hài hước, phũ phàng." }, 
-          { role: "user", content: "Bói một quẻ tarot định mệnh hôm nay." }
-        ]);
-        const embed = new EmbedBuilder().setColor(0x8E44AD).setTitle("🔮 QUẺ BÓI TAROT HÔM NAY").setDescription(res);
+        const tarotCards = [
+          "Quẻ bài The Fool: Hôm nay cực kỳ thích hợp để làm mấy chuyện điên rồ, cẩn thận té ngã nhé.",
+          "Quẻ bài The Magician: Bạn đang nắm giữ mọi quyền lực trong tay, thích làm gì thì triển luôn đi.",
+          "Quẻ bài The Star: Vận may đang mỉm cười, làm gì cũng hanh thông, trúng kèo lớn.",
+          "Quẻ bài The Tower: Chuẩn bị tinh thần đón nhận một cú lừa hoặc drama bất ngờ xảy ra đi là vừa."
+        ];
+        const res = tarotCards[Math.floor(Math.random() * tarotCards.length)];
+        const embed = new EmbedBuilder().setColor(0x8E44AD).setTitle("🔮 QUẺ BÓI TAROT ĐỊNH MỆNH").setDescription(res);
         await interaction.editReply({ embeds: [embed] });
         return;
       }
+
       if (interaction.commandName === "dice") {
-        await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x34495E).setTitle("🎲 ĐỔ XÍ NGẦU").setDescription("🎲 Đang tung xí ngầu lên bàn... ⚀ ⚁ ⚂ ⚃ ⚄ ⚅")] });
-        await new Promise(r => setTimeout(r, 1200));
+        await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x34495E).setTitle("🎲 ĐỔ XÍ NGẦU").setDescription("🎲 Đang tung xí ngầu lên bàn... ⚀ ⚁ ⚂")] });
+        await new Promise(r => setTimeout(r, 1000));
 
         const d1 = Math.floor(Math.random() * 6) + 1;
         const d2 = Math.floor(Math.random() * 6) + 1;
         const total = d1 + d2;
-        const embed = new EmbedBuilder().setColor(0x34495E).setTitle("🎲 ĐỔ XÍ NGẦU").setDescription(`Xí ngầu: **[${d1}] và [${d2}]**\nTổng điểm: **${total} điểm** (${total > 6 ? "Hơi bị đỏ đấy 🔥" : "Nhân phẩm hơi âm rồi 💀"})`);
+        const embed = new EmbedBuilder().setColor(0x34495E).setTitle("🎲 ĐỔ XÍ NGẦU").setDescription(`Kết quả xúc xắc: **[${d1}] và [${d2}]**\nTổng điểm: **${total} điểm** (${total > 6 ? "Nhân phẩm hôm nay khá đỏ đấy 🔥" : "Nhân phẩm hơi âm rồi nha 💀"})`);
         await interaction.editReply({ embeds: [embed] });
         return;
       }
+
     } catch(e) { 
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Đã có lỗi xảy ra khi thực thi lệnh!")], ephemeral: true }); 
-      }
+      logger.error("Lỗi tương tác lệnh:", e);
+      try {
+        const errorEmbed = new EmbedBuilder().setColor(0xFF0000).setDescription("❌ Đã có lỗi xảy ra hoặc lệnh đã quá hạn phản hồi!");
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ embeds: [errorEmbed], files: [] });
+        } else {
+          await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        }
+      } catch (err) {}
     }
   });
 
   client.on(Events.MessageCreate, async (msg) => {
-    if (msg.author.bot || (msg.channel.type !== ChannelType.DM && !isChannelEnabled(msg.channelId))) return;
+    if (msg.author.bot) return;
+    
+    // Nếu không phải tin nhắn DM và kênh chưa bật AI thì bỏ qua
+    if (msg.channel.type !== ChannelType.DM && !isChannelEnabled(msg.channelId)) return;
+    
+    // Nếu ở server (không phải DM) và KHÔNG CÓ tag bot thì bỏ qua, chỉ tính tương tác nền (XP/xu)
+    if (msg.channel.type !== ChannelType.DM && !msg.mentions.has(client.user)) {
+      handleEconomyAndLeveling(msg.author.id, msg);
+      return;
+    }
+
     handleEconomyAndLeveling(msg.author.id, msg);
     try {
       if ("sendTyping" in msg.channel) await msg.channel.sendTyping();
       await sendReply(msg, await generateSmartReply(msg, client.user.id));
-    } catch(e) { await msg.reply("lag quá nói lại xem"); }
+    } catch(e) { await msg.reply("lag quá nói lại xem nào"); }
   });
 
   client.login(token);
 }
 
 startBot();
+      
