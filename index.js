@@ -452,3 +452,13 @@ client.once('ready', async () => {
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
+import http from 'http';
+
+// Mở một server HTTP nhỏ để đáp ứng yêu cầu PORT của Render
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot Discord is running successfully!');
+}).listen(PORT, () => {
+    console.log(`Server HTTP dang chay tren port ${PORT}`);
+});
