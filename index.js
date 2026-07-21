@@ -21,7 +21,7 @@ const logger = {
 
 const enabledChannels = new Set();
 const userLevels = new Map();
-const userEconomy = new Map();
+const userEconomy = new Map(); // Lưu: { balance, lastDaily, streak }
 
 function isChannelEnabled(channelId) { return enabledChannels.has(channelId); }
 function enableChannel(channelId) { enabledChannels.add(channelId); }
@@ -66,9 +66,9 @@ const commands = [
     .addSubcommand((sub) => sub.setName("status").setDescription("Xem trạng thái")),
   new SlashCommandBuilder()
     .setName("imagine")
-    .setDescription("Tạo ảnh AI đỉnh cao từ mô tả")
+    .setDescription("Tạo ảnh AI từ mô tả (Lưu ý: API miễn phí không hỗ trợ ảnh NSFW)")
     .addStringOption((opt) => opt.setName("prompt").setDescription("Mô tả ảnh").setRequired(true))
-    .addBooleanOption((opt) => opt.setName("nsfw").setDescription("Bật NSFW").setRequired(false)),
+    .addBooleanOption((opt) => opt.setName("nsfw").setDescription("Bật cờ NSFW (bị hạn chế bởi máy chủ AI)").setRequired(false)),
   new SlashCommandBuilder()
     .setName("summary")
     .setDescription("Tóm tắt nhanh các tin nhắn gần đây trong kênh"),
@@ -80,7 +80,7 @@ const commands = [
     .setDescription("Kiểm tra số dư xu trong ví của bạn"),
   new SlashCommandBuilder()
     .setName("diemdanh")
-    .setDescription("Điểm danh nhận xu miễn phí mỗi ngày"),
+    .setDescription("Điểm danh nhận xu hàng ngày (chuỗi càng cao thưởng khủng, cách 20h/lần)"),
   new SlashCommandBuilder()
     .setName("coinflip")
     .setDescription("Chơi tung đồng xu cược xu làm giàu")
@@ -91,6 +91,19 @@ const commands = [
         .addChoices(
           { name: "Mặt Ngửa (Head)", value: "ngua" },
           { name: "Mặt Sấp (Tail)", value: "sap" }
+        )
+    )
+    .addIntegerOption((opt) => opt.setName("sotien").setDescription("Số lượng xu muốn cược").setRequired(true)),
+  new SlashCommandBuilder()
+    .setName("taixiu")
+    .setDescription("Chơi minigame Tài Xỉu ăn tiền")
+    .addStringOption((opt) =>
+      opt.setName("chon")
+        .setDescription("Chọn Tài hay Xỉu")
+        .setRequired(true)
+        .addChoices(
+          { name: "Tài (Tổng từ 11 đến 18)", value: "tai" },
+          { name: "Xỉu (Tổng từ 3 đến 10)", value: "xiu" }
         )
     )
     .addIntegerOption((opt) => opt.setName("sotien").setDescription("Số lượng xu muốn cược").setRequired(true)),
@@ -180,13 +193,13 @@ function handleEconomyAndLeveling(userId, message) {
     lvlData.level += 1;
     lvlData.xp = 0;
     message.channel.send(`🎉 kinh vãi, <@${userId}> vừa lên **cấp ${lvlData.level}** rồi đấy, thưởng nóng 500 xu!`);
-    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0 };
+    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0 };
     ecoData.balance += 500;
     userEconomy.set(userId, ecoData);
   }
   userLevels.set(userId, lvlData);
 
-  let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0 };
+  let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0 };
   const earned = Math.floor(Math.random() * 41) + 10;
   ecoData.balance += earned;
   userEconomy.set(userId, ecoData);
@@ -218,7 +231,7 @@ function startBot() {
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     const userId = interaction.user.id;
-    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0 };
+    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0 };
 
     try {
       if (interaction.commandName === "ai") {
@@ -237,21 +250,34 @@ function startBot() {
         return;
       }
       if (interaction.commandName === "vi") {
-        await interaction.reply({ content: `💰 ví của mày đang có: **${ecoData.balance} xu** (chăm chat và điểm danh để giàu thêm nhé)`, ephemeral: false });
+        await interaction.reply({ content: `💰 ví của mày đang có: **${ecoData.balance} xu** (Chuỗi điểm danh hiện tại: 🔥 ${ecoData.streak})`, ephemeral: false });
         return;
       }
       if (interaction.commandName === "diemdanh") {
         const now = Date.now();
-        const cooldown = 24 * 60 * 60 * 1000;
-        if (now - ecoData.lastDaily < cooldown) {
-          const remaining = Math.ceil((cooldown - (now - ecoData.lastDaily)) / (1000 * 60 * 60));
-          await interaction.reply({ content: `⏳ đói rách vừa thôi, hôm nay điểm danh rồi, đợi thêm khoảng **${remaining} tiếng** nữa mới nhận tiếp nhé!`, ephemeral: true });
+        const cooldown = 20 * 60 * 60 * 1000; // 20 tiếng
+        const expireTime = 40 * 60 * 60 * 1000; // Quá 40 tiếng mất chuỗi
+
+        if (ecoData.lastDaily && now - ecoData.lastDaily < cooldown) {
+          const remainingHours = ((cooldown - (now - ecoData.lastDaily)) / (1000 * 60 * 60)).toFixed(1);
+          await interaction.reply({ content: `⏳ đói rách vừa thôi, chưa đủ 20 tiếng đâu! Đợi khoảng **${remainingHours} tiếng** nữa mới điểm danh tiếp được nhé!`, ephemeral: true });
           return;
         }
-        ecoData.balance += 2000;
+
+        // Tính chuỗi (Streak)
+        if (ecoData.lastDaily && now - ecoData.lastDaily <= expireTime) {
+          ecoData.streak += 1;
+        } else {
+          ecoData.streak = 1; // Reset chuỗi nếu quá hạn
+        }
+
+        // Thưởng cơ bản 2000 xu + thưởng thêm theo chuỗi (mỗi chuỗi +200 xu)
+        const reward = 2000 + (ecoData.streak - 1) * 200;
+        ecoData.balance += reward;
         ecoData.lastDaily = now;
         userEconomy.set(userId, ecoData);
-        await interaction.reply({ content: `🎁 điểm danh thành công! nhận ngay **2000 xu** vào ví, giàu to rồi nhé!`, ephemeral: false });
+
+        await interaction.reply({ content: `🎁 điểm danh thành công! Nhận ngay **${reward} xu** (Chuỗi 🔥 **${ecoData.streak}** ngày/lần liên tiếp). Giàu to rồi nhé!`, ephemeral: false });
         return;
       }
       if (interaction.commandName === "coinflip") {
@@ -275,13 +301,44 @@ function startBot() {
         }
         return;
       }
+      if (interaction.commandName === "taixiu") {
+        const choice = interaction.options.getString("chon", true);
+        const amount = interaction.options.getInteger("sotien", true);
+
+        if (amount <= 0 || ecoData.balance < amount) {
+          await interaction.reply({ content: `❌ cược kiểu gì đấy? Ví mày chỉ có **${ecoData.balance} xu** thôi!`, ephemeral: true });
+          return;
+        }
+
+        // Đổ 3 hột xí ngầu (mỗi hột từ 1 đến 6)
+        const d1 = Math.floor(Math.random() * 6) + 1;
+        const d2 = Math.floor(Math.random() * 6) + 1;
+        const d3 = Math.floor(Math.random() * 6) + 1;
+        const total = d1 + d2 + d3;
+        const ketqua = total >= 11 ? "tai" : "xiu";
+
+        if (choice === ketqua) {
+          ecoData.balance += amount;
+          userEconomy.set(userId, ecoData);
+          await interaction.reply({ content: `🎲 Kết quả xúc xắc: **[${d1}] [${d2}] [${d3}]** = **${total} điểm (${ketqua.toUpperCase()})**.\n🎉 Chúc mừng mày đã húp trọn **+${amount} xu**! (Tổng ví: ${ecoData.balance} xu).`, ephemeral: false });
+        } else {
+          ecoData.balance -= amount;
+          userEconomy.set(userId, ecoData);
+          await interaction.reply({ content: `🎲 Kết quả xúc xắc: **[${d1}] [${d2}] [${d3}]** = **${total} điểm (${ketqua.toUpperCase()})**.\n💀 Chia buồn, mày đoán sai và mất **-${amount} xu** rồi! (Tổng ví: ${ecoData.balance} xu).`, ephemeral: false });
+        }
+        return;
+      }
       if (interaction.commandName === "imagine") {
         const prompt = interaction.options.getString("prompt", true);
         const nsfw = interaction.options.getBoolean("nsfw") ?? false;
         await interaction.deferReply();
-        const imageBuffer = await generateImage(prompt, nsfw);
-        const attachment = new AttachmentBuilder(imageBuffer, { name: "imagine.png" });
-        await interaction.editReply({ content: `🎨 đây, siêu phẩm ảnh của mày đây:`, files: [attachment] });
+        try {
+          const imageBuffer = await generateImage(prompt, nsfw);
+          const attachment = new AttachmentBuilder(imageBuffer, { name: "imagine.png" });
+          await interaction.editReply({ content: `🎨 đây, siêu phẩm ảnh của mày đây:`, files: [attachment] });
+        } catch (err) {
+          await interaction.editReply({ content: `⚠️ không tạo được ảnh này (Có thể do bộ lọc an toàn của AI chặn từ khóa nhạy cảm NSFW hoặc lỗi kết nối).` });
+        }
         return;
       }
       if (interaction.commandName === "summary") {
@@ -364,4 +421,3 @@ function startBot() {
 }
 
 startBot();
-                             
