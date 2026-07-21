@@ -1,20 +1,4 @@
-const { Client, GatewayIntentBits, Partials, REST, Routes, Events } = require('discord.js');
 const OpenAI = require('openai');
-const http = require('http');
-const fs = require('fs');
-
-const logger = {
-    warn: (obj, msg) => console.warn(JSON.stringify({ level: 'warn', ...((typeof obj === 'string') ? { msg: obj } : { ...obj, msg }) }))
-};
-
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ],
-    partials: [Partials.Channel, Partials.Message]
-});
 
 const openai = new OpenAI({
     apiKey: process.env.NVIDIA_API_KEY,
@@ -31,21 +15,6 @@ QUY TẮC VÀNG ĐỂ CHAT HẾT NHƯ NGƯỜI THẬT:
 5. Từ lóng Gen Z Discord: đỉnh chương, xỉu, chê, cứu, bro, ét o ét, ảo thật đấy, cay thế nhỉ, mơ đi cưng, vãi.
 6. Độ dài: Ngắn gọn từ 1 - 3 câu chuẩn chat Discord. Đừng bao giờ viết thành bài văn tư luận dài dòng.`;
 
-async function callNvidiaAI(messages) {
-    try {
-        const completion = await openai.chat.completions.create({
-            model: MODEL_NAME,
-            messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-            temperature: 0.7,
-            max_tokens: 300
-        });
-        return completion.choices[0]?.message?.content || 'hồng biết nói gì luôn à ngớ ngỉh chấm dăm v';
-    } catch (e) {
-        logger.warn(e, 'Nvidia AI error');
-        return 'năng lag quá bọn ấy, tớ từ hàng réo v';
-    }
-}
-
 const MEDIA = {
     wallet: 'https://media.giphy.com/media/3o6DGwAzAzrPi5DQ8/giphy.gif',
     daily: 'https://media.giphy.com/media/26tp1GNJN0xLybiU/giphy.gif',
@@ -56,41 +25,6 @@ const MEDIA = {
     ai_on: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800',
     ai_off: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'
 };
-
-const aiChannels = new Set();
-const userEconomy = new Map();
-const chatHistories = new Map();
-
-function getUserData(userId) {
-    if (!userEconomy.has(userId)) {
-        userEconomy.set(userId, {
-            balance: 1000,
-            lastDaily: 0,
-            plots: [null, null, null, null],
-            fishes: [],
-            rod: 'tre',
-            streak: 0
-        });
-    }
-    return userEconomy.get(userId);
-}
-
-function saveUserData(userId, data) {
-    userEconomy.set(userId, data);
-}
-
-function createBaseEmbed(color, title, description, imageMedia = null) {
-    const embed = {
-        color: color,
-        title: title,
-        description: description,
-        timestamp: new Date().toISOString()
-    };
-    if (imageMedia) {
-        embed.image = { url: imageMedia };
-    }
-    return embed;
-}
 
 const FISH_LIST = [
     { name: 'Chiếc Ủng Rách (Rác)', price: 10, rarity: 'Trash' },
@@ -129,12 +63,61 @@ const ANIME_LIST = [
     { name: 'saitama', display: 'Saitama', hint: 'Thánh trọc đấm một phát chết luôn trong One Punch Man', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800' }
 ];
 
-const commands = [
+const userEconomy = new Map();
+
+function getUserData(userId) {
+    if (!userEconomy.has(userId)) {
+        userEconomy.set(userId, {
+            balance: 1000,
+            lastDaily: 0,
+            plots: [null, null, null, null],
+            fishes: [],
+            rod: 'tre',
+            streak: 0
+        });
+    }
+    return userEconomy.get(userId);
+}
+
+function saveUserData(userId, data) {
+    userEconomy.set(userId, data);
+}
+
+function createBaseEmbed(color, title, description, imageMedia = null) {
+    const embed = { color, title, description, timestamp: new Date().toISOString() };
+    if (imageMedia) embed.image = { url: imageMedia };
+    return embed;
+}
+
+async function callNvidiaAI(messages) {
+    try {
+        const completion = await openai.chat.completions.create({
+            model: MODEL_NAME,
+            messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+            temperature: 0.3,
+            max_tokens: 300
+        });
+        return completion.choices[0]?.message?.content || 'hồng biết nói gì luôn à ngớ ngẩn chấm than v';
+    } catch (e) {
+        console.warn('Nvidia AI error:', e);
+        return 'mạng lag quá bấy ơi, tớ từ hàng réo v';
+    }
+}
+
+module.exports = { MEDIA, FISH_LIST, ANIME_LIST, getUserData, saveUserData, createBaseEmbed, callNvidiaAI };
+            const commands = [
     { name: 'vi', description: 'Xem tài khoản và tài sản cá nhân' },
     { name: 'daily', description: 'Điểm danh nhận xu mỗi ngày' },
     { name: 'canca', description: 'Đi câu cá giải trí kiếm tiền' },
     { name: 'slot', description: 'Chơi máy quay hũ đổi thưởng', options: [{ name: 'sotien', type: 4, description: 'Số xu cược', required: true }] },
-    { name: 'taixiu', description: 'Chơi tài xỉu nhanh', options: [{ name: 'luachon', type: 3, description: 'tai hoặc xiu', required: true, choices: [{ name: 'Tài', value: 'tai' }, { name: 'Xỉu', value: 'xiu' }] }, { name: 'sotien', type: 4, description: 'Số xu cược', required: true }] },
+    { 
+        name: 'taixiu', 
+        description: 'Chơi tài xỉu nhanh', 
+        options: [
+            { name: 'luachon', type: 3, description: 'tai hoặc xiu', required: true, choices: [{ name: 'Tài', value: 'tai' }, { name: 'Xỉu', value: 'xiu' }] }, 
+            { name: 'sotien', type: 4, description: 'Số xu cược', required: true }
+        ] 
+    },
     { name: 'checkavatar', description: 'Xem avatar người dùng', options: [{ name: 'user', type: 6, description: 'Chọn user', required: false }] },
     { name: 'doananime', description: 'Minigame đoán tên nhân vật anime' },
     { name: 'nongtrai', description: 'Quản lý và thu hoạch nông trại' },
@@ -151,9 +134,28 @@ const commands = [
     }
 ];
 
+module.exports = commands;
+const { Client, GatewayIntentBits, Partials, REST, Routes, Events } = require('discord.js');
+const http = require('http');
+const { MEDIA, FISH_LIST, ANIME_LIST, getUserData, saveUserData, createBaseEmbed, callNvidiaAI } = require('./config');
+const commands = require('./commands');
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ],
+    partials: [Partials.Channel, Partials.Message]
+});
+
+const aiChannels = new Set();
+const chatHistories = new Map();
+
 function isChannelEnabled(channelId) {
     return aiChannels.has(channelId);
 }
+
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -163,12 +165,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
     try {
         if (commandName === 'vi') {
-            const embed = createBaseEmbed(
-                0x00FFCC,
-                `🛡️ TÀI KHOẢN CỦA ${interaction.user.username.toUpperCase()}`,
-                'Sở hữu hệ thống kinh tế tối ưu tích hợp Animation!',
-                MEDIA.wallet
-            );
+            const embed = createBaseEmbed(0x00FFCC, `🛡️ TÀI KHOẢN CỦA ${interaction.user.username.toUpperCase()}`, 'Sở hữu hệ thống kinh tế tối ưu tích hợp Animation!', MEDIA.wallet);
             embed.fields = [
                 { name: '💰 Số dư', value: `**${eco.balance.toLocaleString()} xu**`, inline: true },
                 { name: '🔥 Chuỗi điểm danh', value: `**${eco.streak} ngày**`, inline: true },
@@ -192,12 +189,7 @@ client.on(Events.InteractionCreate, async interaction => {
             eco.streak += 1;
             saveUserData(userId, eco);
 
-            const embed = createBaseEmbed(
-                0x00FF00,
-                '🎉 Điểm Danh Thành Công',
-                `Nhận ngay **+500 xu** vào tài khoản ví! Chuỗi hiện tại: **${eco.streak} ngày**.`,
-                MEDIA.daily
-            );
+            const embed = createBaseEmbed(0x00FF00, '🎉 Điểm Danh Thành Công', `Nhận ngay **+500 xu** vào tài khoản ví! Chuỗi hiện tại: **${eco.streak} ngày**.`, MEDIA.daily);
             await interaction.reply({ embeds: [embed] });
         } 
         else if (commandName === 'canca') {
@@ -220,12 +212,7 @@ client.on(Events.InteractionCreate, async interaction => {
             saveUserData(userId, eco);
 
             const isTrash = caughtFish.rarity === 'Trash';
-            const embed = createBaseEmbed(
-                isTrash ? 0x3498DB : 0x00FF00,
-                '🎣 KẾT QUẢ CÂU CÁ',
-                `Bạn vung cần **${eco.rod.toUpperCase()}** và giật được:\n**${caughtFish.name}**!\n💰 Đã bán thu về: **${caughtFish.price.toLocaleString()} xu**.`,
-                MEDIA.fishing
-            );
+            const embed = createBaseEmbed(isTrash ? 0x3498DB : 0x00FF00, '🎣 KẾT QUẢ CÂU CÁ', `Bạn vung cần **${eco.rod.toUpperCase()}** và giật được:\n**${caughtFish.name}**!\n💰 Đã bán thu về: **${caughtFish.price.toLocaleString()} xu**.`, MEDIA.fishing);
             await interaction.reply({ embeds: [embed] });
         } 
         else if (commandName === 'slot') {
@@ -248,12 +235,7 @@ client.on(Events.InteractionCreate, async interaction => {
             eco.balance += winnings;
             saveUserData(userId, eco);
 
-            const embed = createBaseEmbed(
-                multiplier > 0 ? 0xF1C40F : 0xC05A5A0,
-                '🎰 SLOT MACHINE ĐANG QUAY...',
-                `| ${r1} | ${r2} | ${r3} |\n\n${multiplier > 0 ? `🎉 Trúng thưởng! Bạn nhận được **${winnings.toLocaleString()} xu**!` : `😢 Mất trắng **${bet.toLocaleString()} xu** rồi bỏ tẻo.`}`,
-                MEDIA.slot
-            );
+            const embed = createBaseEmbed(multiplier > 0 ? 0xF1C40F : 0xC05A5A0, '🎰 SLOT MACHINE ĐANG QUAY...', `| ${r1} | ${r2} | ${r3} |\n\n${multiplier > 0 ? `🎉 Trúng thưởng! Bạn nhận được **${winnings.toLocaleString()} xu**!` : `😢 Mất trắng **${bet.toLocaleString()} xu** rồi bỏ tẻo.`}`, MEDIA.slot);
             await interaction.reply({ embeds: [embed] });
         } 
         else if (commandName === 'taixiu') {
@@ -276,32 +258,17 @@ client.on(Events.InteractionCreate, async interaction => {
             saveUserData(userId, eco);
 
             const diceEmojis = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-            const embed = createBaseEmbed(
-                win ? 0x00FF00 : 0xFF0000,
-                win ? '🏆 KẾT QUẢ TÀI XỈU: CHIẾN THẮNG!' : '❌ KẾT QUẢ TÀI XỈU: THUA QUỐC!',
-                `Xúc xắc: ${diceEmojis[d1]} ${diceEmojis[d2]} ${diceEmojis[d3]} (Tổng: **${total} điểm** - **${outcome.toUpperCase()}**)\n\nLựa chọn của bạn: **${choice.toUpperCase()}**\n${win ? `🎁 Thưởng nhận được: **+${(bet * 2)} xu**` : `❌ Mất cược: **-${bet} xu**`}\n\n💰 Số dư ví mới: **${eco.balance.toLocaleString()} xu**`,
-                MEDIA.trailerVideo
-            );
+            const embed = createBaseEmbed(win ? 0x00FF00 : 0xFF0000, win ? '🏆 KẾT QUẢ TÀI XỈU: CHIẾN THẮNG!' : '❌ KẾT QUẢ TÀI XỈU: THUA QUỐC!', `Xúc xắc: ${diceEmojis[d1]} ${diceEmojis[d2]} ${diceEmojis[d3]} (Tổng: **${total} điểm** - **${outcome.toUpperCase()}**)\n\nLựa chọn của bạn: **${choice.toUpperCase()}**\n${win ? `🎁 Thưởng nhận được: **+${(bet * 2)} xu**` : `❌ Mất cược: **-${bet} xu**`}\n\n💰 Số dư ví mới: **${eco.balance.toLocaleString()} xu**`, MEDIA.trailerVideo);
             await interaction.reply({ embeds: [embed] });
         } 
         else if (commandName === 'checkavatar') {
             const targetUser = interaction.options.getUser('user') || interaction.user;
-            const embed = createBaseEmbed(
-                0x3498DB,
-                `🖼️ Avatar của ${targetUser.username}`,
-                `Nhấn vào link bên dưới để xem ảnh gốc kích thước lớn.`,
-                targetUser.displayAvatarURL({ dynamic: true, size: 1024 })
-            );
+            const embed = createBaseEmbed(0x3498DB, `🖼️ Avatar của ${targetUser.username}`, `Nhấn vào link bên dưới để xem ảnh gốc kích thước lớn.`, targetUser.displayAvatarURL({ dynamic: true, size: 1024 }));
             await interaction.reply({ embeds: [embed] });
         } 
         else if (commandName === 'doananime') {
             const character = ANIME_LIST[Math.floor(Math.random() * ANIME_LIST.length)];
-            const embed = createBaseEmbed(
-                0x9B59B6,
-                '🎯 MINIGAME WEEBU 100 NHÂN VẬT',
-                `💡 Gợi ý: **${character.hint}**\n\nBạn có 15 giây để gõ tên nhân vật vào kênh này!`,
-                character.image
-            );
+            const embed = createBaseEmbed(0x9B59B6, '🎯 MINIGAME WEEBU 100 NHÂN VẬT', `💡 Gợi ý: **${character.hint}**\n\nBạn có 15 giây để gõ tên nhân vật vào kênh này!`, character.image);
             await interaction.reply({ embeds: [embed] });
 
             const filter = m => m.author.id === userId;
@@ -322,12 +289,7 @@ client.on(Events.InteractionCreate, async interaction => {
         } 
         else if (commandName === 'nongtrai') {
             const plotStatus = eco.plots.map((p, i) => `ô đất số ${i + 1} : ${p ? `🌱 Trồng(${p.name})` : '🕳️ Trống'}`).join('\n');
-            const embed = createBaseEmbed(
-                0x2ECC71,
-                `🌾 Nông Trại Cá Nhân Của ${interaction.user.username}`,
-                `Trạng thái các ô trống trọt:\n${plotStatus}`,
-                MEDIA.farm
-            );
+            const embed = createBaseEmbed(0x2ECC71, `🌾 Nông Trại Cá Nhân Của ${interaction.user.username}`, `Trạng thái các ô trống trọt:\n${plotStatus}`, MEDIA.farm);
             await interaction.reply({ embeds: [embed] });
         } 
         else if (commandName === 'ai') {
@@ -345,25 +307,24 @@ client.on(Events.InteractionCreate, async interaction => {
             }
         }
     } catch (err) {
-        logger.warn(err, 'Lỗi thực thi tương tác lệnh');
+        console.warn('Lỗi thực thi tương tác lệnh:', err);
         if (!interaction.replied) {
             await interaction.reply({ content: '⚠️ Đã xảy ra lỗi hệ thống khi xử lý lệnh này!', ephemeral: true });
         }
     }
 });
+
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !isChannelEnabled(message.channelId)) return;
 
     try {
         await message.channel.sendTyping();
-
         if (!chatHistories.has(message.channelId)) {
             chatHistories.set(message.channelId, []);
         }
 
         const history = chatHistories.get(message.channelId);
         history.push({ role: 'user', content: `[Thành viên ${message.author.username}] nói: ${message.content}` });
-
         if (history.length > 8) history.shift();
 
         const replyText = await callNvidiaAI(history);
@@ -371,7 +332,7 @@ client.on(Events.MessageCreate, async message => {
 
         await message.reply(replyText);
     } catch (err) {
-        logger.warn(err, 'Lỗi xử lý tin nhắn AI');
+        console.warn('Lỗi xử lý tin nhắn AI:', err);
         await message.reply('Úi, não bộ AI đang gặp chút sự cố, cậu hỏi lại sau nhé!');
     }
 });
@@ -393,8 +354,9 @@ client.once(Events.ClientReady, async () => {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
         console.log('✅ Đã nạp thành công toàn bộ Slash Commands vào Discord!');
     } catch (err) {
-        logger.warn(err, 'Lỗi nạp Slash Commands');
+        console.warn('Lỗi nạp Slash Commands:', err);
     }
 });
 
 client.login(process.env.DISCORD_TOKEN);
+            
