@@ -1,80 +1,222 @@
 import {
     Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder,
-    EmbedBuilder, AttachmentBuilder, Partials, ActivityType,
-    ChannelType, Events
+    EmbedBuilder, Partials, Events
 } from 'discord.js';
-import express from 'express';
 import OpenAI from 'openai';
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot is running!'));
-app.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
 
 const logger = {
     warn: (obj, msg) => console.warn(JSON.stringify({ level: 'warn', ...((typeof obj === 'string') ? { msg: obj } : { ...obj, msg }) }))
 };
 
-const aiChannels = new Set();
-const userEconomy = new Map();
-
-function enableChannel(channelId) { aiChannels.add(channelId); }
-function disableChannel(channelId) { aiChannels.delete(channelId); }
-function isChannelEnabled(channelId) { return aiChannels.has(channelId); }
-
-const ALL_SEEDS = [
-    { id: 'carot', name: '🥕 Củ Rốt Thường', rarity: 'Common', cost: 200, profit: 400, duration: 5 * 60 * 1000 },
-    { id: 'bapcas', name: '🌽 Bắp Cải Xanh', rarity: 'Common', cost: 350, profit: 750, duration: 8 * 60 * 1000 },
-    { id: 'dautay', name: '🍓 Dâu Tây Ngọt', rarity: 'Uncommon', cost: 600, profit: 1300, duration: 15 * 60 * 1000 },
-    { id: 'cachua', name: '🍅 Cà Chua Mong Nước', rarity: 'Rare', cost: 900, profit: 2000, duration: 20 * 60 * 1000 },
-    { id: 'duahau', name: '🍉 Dưa Hấu Khổng Lồ', rarity: 'Rare', cost: 1500, profit: 3500, duration: 30 * 60 * 1000 },
-    { id: 'hoahong', name: '🌹 Hoa Hồng Bí Thẩn', rarity: 'Rare', cost: 2500, profit: 6000, duration: 45 * 60 * 1000 },
-    { id: 'kincuong', name: '💎 Cây Kim Cương Phát Sáng', rarity: 'Epic', cost: 4000, profit: 10000, duration: 60 * 60 * 1000 },
-    { id: 'hoatran', name: '✨ Hoa Trắng Sao Huyền Thoại', rarity: 'Legendary', cost: 8000, profit: 22000, duration: 120 * 60 * 1000 }
-];
-
-let currentShopStock = [];
-
-function updateShopStock() {
-    const count = Math.floor(Math.random() * 3) + 4;
-    currentShopStock = [];
-    for (let i = 0; i < count; i++) {
-        const seed = ALL_SEEDS[Math.floor(Math.random() * ALL_SEEDS.length)];
-        const stockQty = Math.floor(Math.random() * 8) + 3;
-        currentShopStock.push({ ...seed, stock: stockQty });
-    }
-}
-updateShopStock();
-setInterval(updateShopStock, 60 * 60 * 1000);
-
-const FISH_LIST = [
-    { name: '🐟 Cá Rô Phi', price: 120, rarity: 'Common' },
-    { name: '🐠 Cá Chép Vàng', price: 300, rarity: 'Uncommon' },
-    { name: '🐡 Cá Nóc Phình', price: 650, rarity: 'Rare' },
-    { name: '🦈 Cá Mập Con', price: 1800, rarity: 'Epic' },
-    { name: '🐋 Cá Voi Xanh Huyền Thoại', price: 6000, rarity: 'Legendary' }
-];
-
-const ROD_PRICES = {
-    carbon: 2000,
-    titan: 10000
+// --- ANIMATION GIFS ---
+const GIFS = {
+    wallet: 'https://media.giphy.com/media/3o6gDWzmAzrpi5DQU8/giphy.gif',
+    daily: 'https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif',
+    fishing: 'https://media.giphy.com/media/3o7TKSx0g723R02q3e/giphy.gif',
+    slot: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHp1bng1NW0ycjN5OWo5b3ZkY3J6cHFoYmV1NXV5NXdneWczNmtuaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26ufcVAp3AIJJsrIk/giphy.gif',
+    anime: 'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif',
+    farm: 'https://media.giphy.com/media/l0HlHFRbmaZtBRhXG/giphy.gif',
+    ai_on: 'https://media.giphy.com/media/3o7abK294kG6znhq7O/giphy.gif',
+    ai_off: 'https://media.giphy.com/media/3o7abIqp75vZXa19aU/giphy.gif'
 };
 
-const openai = new OpenAI({
-    apiKey: process.env.NVIDIA_API_KEY,
-    baseURL: 'https://integrate.api.nvidia.com/v1'
-});
+// --- QUẢN LÝ BỘ NHỚ ---
+const aiChannels = new Set();
+const userEconomy = new Map();
+const chatHistories = new Map();
 
+function enableChannel(channelId) { aiChannels.add(channelId); }
+function disableChannel(channelId) { aiChannels.delete(channelId); chatHistories.delete(channelId); }
+function isChannelEnabled(channelId) { return aiChannels.has(channelId); }
+
+function getUserData(userId) {
+    if (!userEconomy.has(userId)) {
+        userEconomy.set(userId, { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null], rod: 'tre', fishes: [] });
+    }
+    return userEconomy.get(userId);
+}
+
+function saveUserData(userId, data) { userEconomy.set(userId, data); }
+
+function createBaseEmbed(color, title, description, imageGif = null, thumbnailGif = null) {
+    const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setTimestamp();
+    if (imageGif) embed.setImage(imageGif);
+    if (thumbnailGif) embed.setThumbnail(thumbnailGif);
+    return embed;
+}
+
+// --- DỮ LIỆU GAME ---
+const ALL_SEEDS = [
+    { id: 'lua', name: '🌾 Lúa Nước Hạt Vàng', rarity: 'Common', cost: 100, profit: 250, duration: 3 * 60 * 1000 },
+    { id: 'carot', name: '🥕 Củ Rốt Thường', rarity: 'Common', cost: 200, profit: 450, duration: 5 * 60 * 1000 },
+    { id: 'bapcas', name: '🌽 Bắp Cải Xanh', rarity: 'Common', cost: 350, profit: 750, duration: 8 * 60 * 1000 },
+    { id: 'khoai', name: '🍠 Khoai Lang Tím', rarity: 'Uncommon', cost: 450, profit: 1000, duration: 10 * 60 * 1000 },
+    { id: 'dautay', name: '🍓 Dâu Tây Ngọt', rarity: 'Uncommon', cost: 600, profit: 1300, duration: 15 * 60 * 1000 },
+    { id: 'cachua', name: '🍅 Cà Chua Mọng Nước', rarity: 'Rare', cost: 900, profit: 2000, duration: 20 * 60 * 1000 },
+    { id: 'nho', name: '🍇 Nho Xanh Trĩu Quả', rarity: 'Rare', cost: 1200, profit: 2800, duration: 25 * 60 * 1000 },
+    { id: 'saurieng', name: '🍈 Sầu Riêng Ngọt Lịm', rarity: 'Epic', cost: 3000, profit: 8000, duration: 45 * 60 * 1000 },
+    { id: 'hoatran', name: '✨ Hoa Trắng Sao Huyền Thoại', rarity: 'Legendary', cost: 8000, profit: 22000, duration: 120 * 60 * 1000 },
+    { id: 'nhansam', name: '🌿 Nhân Sâm Ngàn Năm', rarity: 'Legendary', cost: 15000, profit: 45000, duration: 180 * 60 * 1000 },
+    { id: 'acquy', name: '🔥 Quả Ác Quỷ Thần Bí', rarity: 'Mythic', cost: 40000, profit: 150000, duration: 300 * 60 * 1000 }
+];
+
+const FISH_LIST = [
+    { name: '👢 Chiếc Ủng Rách (Rác)', price: 10, rarity: 'Trash' },
+    { name: '🐡 Cá Lóc Đồng', price: 80, rarity: 'Common' },
+    { name: '🐟 Cá Rô Phi', price: 120, rarity: 'Common' },
+    { name: '🦑 Mực Ống Tươi', price: 200, rarity: 'Common' },
+    { name: '🐠 Cá Chép Vàng', price: 350, rarity: 'Uncommon' },
+    { name: '🍣 Cá Hồi Bơi Ngược', price: 600, rarity: 'Uncommon' },
+    { name: '🦈 Cá Mập Con', price: 1500, rarity: 'Rare' },
+    { name: '🐢 Rùa Biển Khổng Lồ', price: 2500, rarity: 'Rare' },
+    { name: '🐙 Thủy Quái Kraken', price: 6000, rarity: 'Epic' },
+    { name: '🐋 Cá Voi Xanh Huyền Thoại', price: 15000, rarity: 'Legendary' },
+    { name: '🐉 Rồng Biển Thượng Cổ', price: 50000, rarity: 'Mythic' }
+];
+
+// --- KHO 100 NHÂN VẬT ANIME CHI TIẾT ---
+const ANIME_LIST = [
+    // ONE PIECE
+    { name: 'Luffy', hint: 'Thuyền trưởng Băng Mũ Rơm có ước mơ trở thành Vua Hải Tặc' },
+    { name: 'Zoro', hint: 'Kiếm sĩ phái Tam Kiếm siêu ngầu nhưng cực kỳ mù đường' },
+    { name: 'Sanji', hint: 'Đầu bếp mê gái mê đấm bằng chân, thuộc Băng Mũ Rơm' },
+    { name: 'Nami', hint: 'Hoa tiêu cuồng tiền và cam ngọt của Băng Mũ Rơm' },
+    { name: 'Robin', hint: 'Nhà khảo cổ học sở hữu sức mạnh Trái Ác Quỷ Hana Hana no Mi' },
+    { name: 'Chopper', hint: 'Bác sĩ tuần lộc đáng yêu ăn trái Hito Hito no Mi' },
+    { name: 'Usopp', hint: 'Thánh nói dóc kiêm xạ thủ thần ba hoa của nhóm Mũ Rơm' },
+    { name: 'Ace', hint: 'Anh trai Luffy sở hữu Trái Hỏa Quyền Mera Mera no Mi' },
+    { name: 'Sabo', hint: 'Tổng tham mưu trưởng Quân Cách Mạng, anh em kết nghĩa của Luffy' },
+    { name: 'Shanks', hint: 'Hải tặc Tóc Đỏ đã truyền cảm hứng và trao chiếc mũ rơm cho Luffy' },
+
+    // NARUTO
+    { name: 'Naruto', hint: 'Hồ ly chín đuôi Ninja thích ăn ramen Ichiraku, ước mơ làm Hokage' },
+    { name: 'Sasuke', hint: 'Tộc nhân Uchiha sở hữu Sharingan và ước mơ trả thù anh trai' },
+    { name: 'Kakashi', hint: 'Ninja sao chép luôn đeo khẩu trang và đọc sách Thiên Đường Tung Tăng' },
+    { name: 'Itachi', hint: 'Thiên tài tộc Uchiha hy sinh cả tộc vì hòa bình Làng Lá' },
+    { name: 'Jiraiya', hint: 'Nhân giả hiền nhân thích do thám phòng tắm nữ, thầy của Naruto' },
+    { name: 'Hinata', hint: 'Cô gái tộc Hyuga thầm yêu Naruto từ nhỏ, sở hữu Byakugan' },
+    { name: 'Gaara', hint: 'Nhất Vĩ Kazekage làng Cát có chữ Ái trên trán' },
+    { name: 'Minato', hint: 'Tia Chớp Vàng Làng Lá, Hokage Đệ Tứ và là cha của Naruto' },
+    { name: 'Madara', hint: 'Huyền thoại tộc Uchiha kích hoạt Kế hoạch Nguyệt Nhãn' },
+    { name: 'Obito', hint: 'Kẻ đeo mặt nạ Tobi đứng sau tổ chức Akatsuki' },
+
+    // JUJUTSU KAISEN
+    { name: 'Gojo Satoru', hint: 'Thầy giáo bịt mắt mạnh nhất với Kỹ năng Vô Hạn và Tử' },
+    { name: 'Yuji Itadori', hint: 'Cậu học sinh trung học nuốt ngón tay của Vua Nguyền Hồn' },
+    { name: 'Megumi Fushiguro', hint: 'Chú thuật sư triệu hồi Thập Chủng Thần Hình Graph' },
+    { name: 'Nobara Kugisaki', hint: 'Cô gái cá tính sử dụng đinh và búa để diệt nguyền hồn' },
+    { name: 'Sukuna', hint: 'Vua Nguyền Hồn ngự trị trong cơ thể Yuji' },
+    { name: 'Kento Nanami', hint: 'Chú thuật sư từng làm dân văn phòng với chiêu Bảy Ba' },
+    { name: 'Toji Fushiguro', hint: 'Thánh Thiên Dữ Chú Lực, cha của Megumi' },
+    { name: 'Yuta Okkotsu', hint: 'Chú thuật sư đặc cấp có Rika bảo vệ' },
+    { name: 'Maki Zenin', hint: 'Cô gái tộc Zenin không có chú lực nhưng sử dụng chú cụ cực giỏi' },
+    { name: 'Suguru Geto', hint: 'Bạn thân cũ của Gojo, chú thuật sư thu phục nguyền hồn' },
+
+    // DEMON SLAYER
+    { name: 'Tanjiro', hint: 'Cậu bé đeo bông tai Hơi Thở Của Mặt Trời đi tìm thuốc chữa cho em' },
+    { name: 'Nezuko', hint: 'Em gái ngậm ống tre dễ thương hóa quỷ chiến đấu cực ngầu' },
+    { name: 'Zenitsu', hint: 'Sợ chết nhưng khi ngủ gật hóa thần Hơi Thở Của Sét' },
+    { name: 'Inosuke', hint: 'Đầu heo rừng thích đấm nhau dùng Hơi Thở Của Quái Thú' },
+    { name: 'Rengoku', hint: 'Viêm Trụ nhiệt huyết như ngọn lửa cháy rực' },
+    { name: 'Giyu', hint: 'Thủy Trụ đơ đơ ít nói "tôi không bị ai ghét cả"' },
+    { name: 'Shinobu', hint: 'Trùng Trụ nụ cười dịu dàng chuyên dùng độc diệt quỷ' },
+    { name: 'Tengen', hint: 'Âm Trụ hào hoa sở hữu 3 cô vợ ninja' },
+    { name: 'Akaza', hint: 'Thượng Huyền Tam võ thuật đỉnh cao trong Thanh Gươm Diệt Quỷ' },
+    { name: 'Muzan', hint: 'Chúa tể quỷ nguyên thủy giống Michael Jackson' },
+
+    // ATTACK ON TITAN
+    { name: 'Eren', hint: 'Thần tượng tự do, biến thành Titan Tiến Công san bằng thế giới' },
+    { name: 'Mikasa', hint: 'Cô gái tộc Ackerman cuồng bảo vệ Eren' },
+    { name: 'Armin', hint: 'Bộ óc chiến thuật thiên tài của Trinh Sát Đoàn, Titan Đại Hình' },
+    { name: 'Levi', hint: 'Chiến thần lùn tịt mạnh nhất nhân loại cuồng sạch sẽ' },
+    { name: 'Erwin', hint: 'Đội trưởng Trinh Sát Đoàn với tiếng hô "Shinzo wo Sasageyo"' },
+    { name: 'Reiner', hint: 'Titan Thiết Giáp muốn làm người hùng nhưng dằn dặt tâm lý' },
+    { name: 'Zeke', hint: 'Titan Quái Thú có khả năng chọi đá thần tốc, anh cùng cha khác mẹ của Eren' },
+    { name: 'Sasha', hint: 'Cô gái khoai tây mê ăn uống của Trinh Sát Đoàn' },
+    { name: 'Hange', hint: 'Nhà nghiên cứu Titan điên rồ và nhiệt huyết' },
+    { name: 'Historia', hint: 'Nữ hoàng thật sự của bức tường Paradis' },
+
+    // DRAGON BALL & ONE PUNCH MAN
+    { name: 'Goku', hint: 'Khỉ con Saiyan thích đánh nhau nâng cấp Ultra Instinct' },
+    { name: 'Vegeta', hint: 'Hoàng tử Saiyan kiêu hãnh cuồng tập luyện vượt Goku' },
+    { name: 'Gohan', hint: 'Con trai Goku bộc phát sức mạnh hóa Super Saiyan 2 diệt Cell' },
+    { name: 'Trunks', hint: 'Kiếm sĩ từ tương lai trở về dặn dò Goku' },
+    { name: 'Piccolo', hint: 'Người Namek từng là kẻ thù nhưng trở thành bảo mẫu nhà Goku' },
+    { name: 'Beerus', hint: 'Thần Hủy Diệt cuồng ăn đồ ăn Trái Đất' },
+    { name: 'Saitama', hint: 'Thánh Phồng đấm phát chết luôn, trọc đầu do tập luyện' },
+    { name: 'Genos', hint: 'Cyborg hiện đại đệ tử ruột của Saitama' },
+    { name: 'Tatsumaki', hint: 'Đứa Con Của Bão Siêu Năng Lực lùn tịt cá tính' },
+    { name: 'Garou', hint: 'Quái vật nhân tạo hunted các anh hùng' },
+
+    // HUNTER X HUNTER & BLEACH
+    { name: 'Gon', hint: 'Cậu bé câu cá đi tìm cha trở thành Hunter' },
+    { name: 'Killua', hint: 'Sát thủ nhí tộc Zoldyck biến niệm thành dòng điện' },
+    { name: 'Kurapika', hint: 'Tộc nhân Kurta mắt đỏ dùng xích diệt Băng Nhện' },
+    { name: 'Hisoka', hint: 'Tên hề biến thái cuồng đánh nhau với quả bong bóng Bungee' },
+    { name: 'Chrollo', hint: 'Bang chủ Băng Nhện Bang Ryodan đánh cắp niệm' },
+    { name: 'Ichigo', hint: 'Tóc cam đại diện tử thần thay thế với thanh Zangetsu' },
+    { name: 'Rukia', hint: 'Nữ tử thần trao sức mạnh cho Ichigo' },
+    { name: 'Aizen', hint: 'Kẻ phản diện thích tháo kính vuốt tóc tạo phản Thi魂Giới' },
+    { name: 'Byakuya', hint: 'Đội trưởng đội 6 tộc trưởng Kuchiki sở hữu Senbonzakura' },
+    { name: 'Kisuke', hint: 'Ông chủ tiệm ch chít mang dép cao su đội nón sọc' },
+
+    // SPY X FAMILY & CHAINSAW MAN
+    { name: 'Anya', hint: 'Bé gái đọc suy nghĩ siêu ngố thích ăn đậu phụng "Waku Waku"' },
+    { name: 'Loid', hint: 'Điệp viên Twilight làm người cha mẫu mực' },
+    { name: 'Yor', hint: 'Nữ sát thủ Công chúa Gai làm người mẹ đảm đang' },
+    { name: 'Denji', hint: 'Thợ săn quỷ nghèo khổ ước mơ biến thành Quỷ Cưa' },
+    { name: 'Power', hint: 'Quỷ máu ngạo mạn, bạn thân của Denji' },
+    { name: 'Makima', hint: 'Sĩ quan cấp cao Quỷ Chi phối xinh đẹp nhưng đáng sợ' },
+    { name: 'Aki', hint: 'Thợ săn quỷ sử dụng Quỷ Cáo và Quỷ Lời Nguyền' },
+    { name: 'Reze', hint: 'Cô gái Quỷ Bom Bom gieo tương tư cho Denji' },
+    { name: 'Pochita', hint: 'Quỷ Cưa đáng yêu biến thành trái tim của Denji' },
+    { name: 'Kobeni', hint: 'Nữ thợ săn quỷ hay khóc nhè nhưng nhảy Dance Dance cực đỉnh' },
+
+    // ANIME KINH ĐIỂN VÀ ISEKAI
+    { name: 'Light Yagami', hint: 'Học sinh thiên tài sở hữu Cuốn Sổ Tử Thần Death Note' },
+    { name: 'L', hint: 'Thám tử thiên tài cuồng ăn đồ ngọt dáng ngồi khom lưng' },
+    { name: 'Ryuk', hint: 'Thần chết cuồng ăn táo đỏ' },
+    { name: 'Edward Elric', hint: 'Giả kim thuật sư tóc vàng lùn tịt tìm Đá Triết Gia' },
+    { name: 'Alphonse', hint: 'Em trai Edward mang linh hồn nhập vào bộ giáp sắt' },
+    { name: 'Roy Mustang', hint: 'Giả kim thuật sư Ngọn Lửa búng tay ra lửa' },
+    { name: 'Lelouch', hint: 'Hoàng tử Britannia sở hữu con mắt Geass ra lệnh tuyệt đối' },
+    { name: 'C.C.', hint: 'Cô gái bất tử mê ăn pizza đồng hành cùng Lelouch' },
+    { name: 'Kirito', hint: 'Hắc Kiếm Sĩ độc hành trong Sword Art Online' },
+    { name: 'Asuna', hint: 'Nữ kiếm sĩ chớp nhoáng Phó hội trưởng Huyết Tộc Liên Minh' },
+    { name: 'Subaru', hint: 'Thánh chịu đựng có khả năng Chết Đi Sống Lại trong Re:Zero' },
+    { name: 'Emilia', hint: 'Bán Bán Tinh Linh tóc bạc đáng yêu Subaru liều mạng bảo vệ' },
+    { name: 'Rem', hint: 'Hầu gái quỷ tóc xanh "Tóc xanh chân thành"' },
+    { name: 'Kazuma', hint: 'Thánh bựa Isekai chuyên dùng chiêu Steal' },
+    { name: 'Aqua', hint: 'Nữ thần nước vô dụng phế vật khóc nhè' },
+    { name: 'Megumin', hint: 'Pháp sư Bão Tố cuồng phép Explosion' },
+    { name: 'Rimuru', hint: 'Slime ma vương bá đạo bá chủ rừng Jura' },
+    { name: 'Mob', hint: 'Cậu bé siêu năng lực 100% bộc phát cảm xúc' },
+    { name: 'Kaneki', hint: 'Bán ngạ quỷ tóc trắng "1000 trừ 7 bằng bao nhiêu"' },
+    { name: 'Spike Spiegel', hint: 'Thợ săn tiền thưởng không gian trong Cowboy Bebop' }
+];
+
+// --- CẤU HÌNH AI "THÔNG MINH NHƯ NGƯỜI THẬT" ---
+const openai = new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: 'https://integrate.api.nvidia.com/v1' });
 const MODEL_NAME = 'meta/llama-3.1-70b-instruct';
-const SYSTEM_PROMPT = 'Bạn là một AI Gen Z siêu cấp lầy lội, thông minh, mỏ hỗn cực tình cảm. Viết hoàn toàn bằng chữ thường, không viết hoa đầu câu, không chấm câu cuối dòng.';
+
+const SYSTEM_PROMPT = `
+Bạn là một thành viên Gen Z lầy lội, cực kỳ thông minh và có cá tính mạnh trong server Discord này. 
+QUY TẮC VÀNG ĐỂ CHAT HỆT NHƯ NGƯỜI THẬT:
+1. TUYỆT ĐỐI KHÔNG BAO GIỜ nói "tôi là AI", "tôi là mô hình ngôn ngữ", "tôi là trợ lý".
+2. Tông giọng: Gen Z vui vẻ, hài hước, mỉa mai nhẹ nhàng, biết giận, biết đùa, cực kỳ tự nhiên.
+3. Cách xưng hô: Dùng tui - ông/bà, tao - mày (nếu đối phương chọc giận), bro, tớ - cậu.
+4. Cách viết: Viết chữ thường hoàn toàn, không viết hoa đầu câu, không xài dấu chấm câu cuối dòng.
+5. Từ lóng Gen Z Discord: dính chưởng, xỉu, chê, cíu, bro, ét o ét, ảo thật đấy, cay thế nhỉ, mơ đi cưng, vãi.
+6. Độ dài: Ngắn gọn từ 1 - 3 câu chuẩn chat Discord. Đừng bao giờ viết thành bài văn tự luận dài dòng.
+`;
 
 async function callNvidiaAI(messages) {
     try {
         const completion = await openai.chat.completions.create({
-            model: MODEL_NAME,
+            model: MODEL_NAME, 
             messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-            temperature: 0.8,
-            max_tokens: 512
+            temperature: 0.9, 
+            max_tokens: 300
         });
         return completion.choices[0]?.message?.content || 'hông biết nói gì luôn á ngơ ngác chít đúm :v';
     } catch (e) {
@@ -83,332 +225,230 @@ async function callNvidiaAI(messages) {
     }
 }
 
-const ANIME_LIST = [
-    { name: 'Monkey D. Luffy', hint: 'Thuyền trưởng mũ rơm, thích ăn thịt và có ước mơ làm Vua Hải Tác' },
-    { name: 'Naruto Uzumaki', hint: 'Ninja làng Lá, có Cửu Vĩ bên trong và miệng hô "Battebayo"' },
-    { name: 'Sasuke Uchiha', hint: 'Thiên tài tộc Uchiha, sở hữu đôi mắt Sharingan' },
-    { name: 'Zoro Roronoa', hint: 'Kiếm sĩ phái tam kiếm, nổi tiếng với kỹ năng "mù đường"' },
-    { name: 'Saitama', hint: 'Anh hùng đầu trọc đấm phát chết luôn một kẻ địch' },
-    { name: 'Eren Yeager', hint: 'Nhân vật chính Attack on Titan với khát vọng tự do cháy bỏng' },
-    { name: 'Levi Ackerman', hint: 'Đội trưởng chiến binh mạnh nhất nhân loại, cuồng sạch sẽ' },
-    { name: 'Light Yagami', hint: 'Học sinh thiên tài nhặt được cuốn sổ tử thần Death Note' },
-    { name: 'Anya Forger', hint: 'Cô bé đọc được suy nghĩ, thích ăn dưa phóng và biểu cảm "Heh"' },
-    { name: 'Loid Forger', hint: 'Điệp viên đỉnh cao có mật danh "Twilight"' },
-    { name: 'Yor Forger', hint: 'Sát thủ khét tiếng với mật danh "Thường Công Chúa"' },
-    { name: 'Denji', hint: 'Thợ săn quỷ nghèo khổ, có ước mơ cực kỳ mặn mòi' },
-    { name: 'Power', hint: 'Quỷ máu ngạo mạn, bạn thân của Denji' },
-    { name: 'Makima', hint: 'Sĩ quan cấp cao điều khiển Chiến Hữu ác quỷ quyền lực' },
-    { name: 'Katsuki Bakugo', hint: 'Thiếu gia nổ tung cá tính mạnh, bạn thời thơ ấu của Deku' },
-    { name: 'Midoriya Izuku', hint: 'Cậu bé vô năng nhận lại sức mạnh One For All từ All Might' },
-    { name: 'Jotaro Kujo', hint: 'Chàng trai ngầu lòi với Stand Star Platinum và câu cửa miệng "Yare yare daze"' },
-    { name: 'Nezuko Kamado', hint: 'Cô em gái hóa quỷ ngậm ống tre đáng yêu' },
-    { name: 'Rem', hint: 'Cô hầu gái tóc xanh trung thành trong Re:Zero' },
-    { name: 'Kaneki Ken', hint: 'Chàng trai bán hoa sinh viên hóa thành bán quỷ mắt một' },
-    { name: 'Killua Zoldyck', hint: 'Sát thủ thiên tài tóc bạc xuất thân từ gia đình Zoldyck' }
-];
+// --- TẠO SLASH COMMANDS ---
 const commands = [
-    new SlashCommandBuilder().setName('ai').setDescription('Bật/tắt chế độ AI tự động').addSubcommand(sub => sub.setName('on').setDescription('Bật AI')).addSubcommand(sub => sub.setName('off').setDescription('Tắt AI')).addSubcommand(sub => sub.setName('status').setDescription('Kiểm tra trạng thái AI')),
+    new SlashCommandBuilder().setName('ai').setDescription('Bật/tắt chế độ AI tự động').addSubcommand(sub => sub.setName('on').setDescription('Bật AI')).addSubcommand(sub => sub.setName('off').setDescription('Tắt AI')),
     new SlashCommandBuilder().setName('vi').setDescription('Kiểm tra tiền, cần câu và nông trại'),
     new SlashCommandBuilder().setName('diandanh').setDescription('Điểm danh nhận xu hàng ngày'),
-    new SlashCommandBuilder().setName('chuyenxu').setDescription('Chuyển xu cho người chơi khác').addUserOption(opt => opt.setName('nguoinhan').setDescription('Người nhận').setRequired(true)).addIntegerOption(opt => opt.setName('sotien').setDescription('Số tiền chuyển').setRequired(true)),
-    new SlashCommandBuilder().setName('coinflip').setDescription('Chơi tung đồng xu cược xu').addStringOption(opt => opt.setName('chon').setDescription('Chọn mặt').setRequired(true).addChoices({ name: 'Mặt Ngửa', value: 'ngua' }, { name: 'Mặt Sấp', value: 'sap' })),
-    new SlashCommandBuilder().setName('doanso').setDescription('Đoán số may mắn từ 1 đến 100').addIntegerOption(opt => opt.setName('so').setDescription('Nhập số của bạn').setRequired(true)),
-    new SlashCommandBuilder().setName('doananime').setDescription('Minigame đoán tên nhân vật Anime siêu vui'),
-    new SlashCommandBuilder().setName('dice').setDescription('Đổ xí ngầu giải trí'),
+    new SlashCommandBuilder().setName('doananime').setDescription('Minigame đoán tên 100 nhân vật Anime'),
     new SlashCommandBuilder().setName('slot').setDescription('Quay hũ Slot Machine săn Jackpot đổi đời').addIntegerOption(opt => opt.setName('sotien').setDescription('Số xu cược quay').setRequired(true)),
-    new SlashCommandBuilder().setName('baucua').setDescription('Trò chơi dân gian Bầu Cưa Tôm Cá truyền thống').addStringOption(opt => opt.setName('chon').setDescription('Chọn linh vật cược').setRequired(true).addChoices({ name: 'Bầu', value: 'bau' }, { name: 'Cua', value: 'cua' }, { name: 'Tôm', value: 'tom' }, { name: 'Cá', value: 'ca' }, { name: 'Gà', value: 'ga' }, { name: 'Nai', value: 'nai' })).addIntegerOption(opt => opt.setName('sotien').setDescription('Số xu cược').setRequired(true)),
-    new SlashCommandBuilder().setName('shop').setDescription('Xem cửa hàng hạt giống nông trại'),
-    new SlashCommandBuilder().setName('nongtrai').setDescription('Hệ thống quản lý nông trại Roblox').addSubcommand(sub => sub.setName('vuon').setDescription('Xem khu vườn của bạn')).addSubcommand(sub => sub.setName('trong').setDescription('Trồng hạt giống').addIntegerOption(opt => opt.setName('oodat').setDescription('Số thứ tự ô đất').setRequired(true)).addStringOption(opt => opt.setName('loaicay').setDescription('Tên hạt giống').setRequired(true))).addSubcommand(sub => sub.setName('thuhoach').setDescription('Thu hoạch cây trồng').addIntegerOption(opt => opt.setName('oodat').setDescription('Số thứ tự ô đất').setRequired(true))).addSubcommand(sub => sub.setName('muadat').setDescription('Mở rộng thêm ô đất (2000 xu)')),
-    new SlashCommandBuilder().setName('cauca').setDescription('Đi câu cá giải trí kiếm thu nhập'),
-    new SlashCommandBuilder().setName('muacancau').setDescription('Nâng cấp cần câu tốt hơn').addStringOption(opt => opt.setName('loai').setDescription('Loại cần câu').setRequired(true).addChoices({ name: 'Cần Carbon', value: 'carbon' }, { name: 'Cần Titan', value: 'titan' })),
-    new SlashCommandBuilder().setName('bxh').setDescription('Xem bảng xếp hạng đại gia giàu nhất server')
+    new SlashCommandBuilder().setName('nongtrai').setDescription('Hệ thống quản lý nông trại').addSubcommand(sub => sub.setName('vuon').setDescription('Xem khu vườn')).addSubcommand(sub => sub.setName('thuhoach').setDescription('Thu hoạch').addIntegerOption(opt => opt.setName('oodat').setDescription('Ô đất').setRequired(true))),
+    new SlashCommandBuilder().setName('cauca').setDescription('Đi câu cá giải trí kiếm thu nhập')
 ].map(c => c.toJSON());
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
     partials: [Partials.Channel, Partials.Message]
 });
-
 client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
+    
     const userId = interaction.user.id;
-    let ecoData = userEconomy.get(userId) || { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null], rod: 'tre', fishes: [] };
+    let eco = getUserData(userId);
 
     try {
-        if (interaction.commandName === 'ai') {
-            const sub = interaction.options.getSubcommand();
-            const channelId = interaction.channelId;
-            if (sub === 'on') {
-                enableChannel(channelId);
-                const embed = new EmbedBuilder().setColor(0x00FF00).setDescription('🟢 Đã bật chế độ AI tự động trong kênh này!');
-                await interaction.reply({ embeds: [embed] });
-            } else if (sub === 'off') {
-                disableChannel(channelId);
-                const embed = new EmbedBuilder().setColor(0xFF0000).setDescription('🔴 Đã tắt chế độ AI tự động trong kênh này!');
-                await interaction.reply({ embeds: [embed] });
-            } else {
-                const status = isChannelEnabled(channelId) ? 'BẬT 🟢' : 'TẮT 🔴';
-                const embed = new EmbedBuilder().setColor(0x00AEB6).setDescription(`🌐 Trạng thái AI tại kênh này đang: **${status}**`);
-                await interaction.reply({ embeds: [embed] });
-            }
-        } else if (interaction.commandName === 'vi') {
-            const embed = new EmbedBuilder()
-                .setTitle(`🌾 VÍ TIỀN & NÔNG TRẠI CỦA ${interaction.user.username.toUpperCase()}`)
-                .setThumbnail(interaction.user.displayAvatarURL())
-                .addFields(
-                    { name: '💰 Số dư', value: `${ecoData.balance.toLocaleString()} xu`, inline: true },
-                    { name: '🔥 Điểm danh liên tiếp', value: `${ecoData.streak} ngày`, inline: true },
-                    { name: '🎣 Cần câu hiện tại', value: `${ecoData.rod.toUpperCase()}`, inline: true },
-                    { name: '🐟 Số cá đã câu', value: `${ecoData.fishes.length} con`, inline: true },
-                    { name: '🌱 Tổng số ô đất', value: `${ecoData.plots.length}`, inline: true }
-                )
-                .setTimestamp();
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'diandanh') {
-            const now = Date.now();
-            const diff = now - ecoData.lastDaily;
-            const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / (60 * 60 * 1000));
-            if (diff < 24 * 60 * 60 * 1000) {
-                const embed = new EmbedBuilder().setColor(0xE74C3C).setTitle('❌ ĐÃ ĐIỂM DANH RỒI').setDescription(`Bạn đã nhận quà hôm nay rồi. Vui lòng quay lại sau khoảng **${hoursLeft} giờ** nữa nhé!`);
-                await interaction.reply({ embeds: [embed], ephemeral: true });
-                return;
-            }
-            ecoData.balance += 500;
-            ecoData.lastDaily = now;
-            ecoData.streak += 1;
-            userEconomy.set(userId, ecoData);
-            const embed = new EmbedBuilder().setColor(0x00FF00).setTitle('🎁 ĐIỂM DANH THÀNH CÔNG').setDescription(`Nhận ngay **500 xu** vào tài khoản! Chuỗi điểm danh: **${ecoData.streak} ngày**.`);
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'coinflip') {
-            const choice = interaction.options.getString('chon');
-            const result = Math.random() < 0.5 ? 'ngua' : 'sap';
-            const win = choice === result;
-            ecoData.balance += win ? 200 : -200;
-            userEconomy.set(userId, ecoData);
-            const embed = new EmbedBuilder()
-                .setColor(win ? 0x2ECC71 : 0xE74C3C)
-                .setTitle('🪙 MINIGAME TUNG ĐỒNG XU')
-                .addFields(
-                    { name: '🎯 Bạn chọn', value: choice.toUpperCase(), inline: true },
-                    { name: '🎲 Kết quả', value: result.toUpperCase(), inline: true },
-                    { name: '💰 Kết quả tài chính', value: win ? '🎉 Thắng lớn **+200 xu**' : '😢 Thua cược **-200 xu**' }
-                );
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'doanso') {
-            const guess = interaction.options.getInteger('so');
-            const secret = Math.floor(Math.random() * 100) + 1;
-            const win = guess === secret;
-            if (win) ecoData.balance += 5000;
-            userEconomy.set(userId, ecoData);
-            const embed = new EmbedBuilder()
-                .setColor(win ? 0x2ECC71 : 0xE74C3C)
-                .setTitle('🔢 MINIGAME ĐOÁN SỐ MAY MẮN')
-                .addFields(
-                    { name: '🎯 Số bạn chọn', value: `${guess}`, inline: true },
-                    { name: '🤫 Con số bí ẩn', value: `${secret}`, inline: true },
-                    { name: '🏆 Kết quả', value: win ? '🎉 Chính xác tuyệt đối! Nhận ngay +5.000 xu!' : '😢 Sai rồi! Chúc bạn may mắn lần sau.' }
-                );
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'doananime') {
-            await interaction.deferReply();
-            const sel = ANIME_LIST[Math.floor(Math.random() * ANIME_LIST.length)];
-            const startEmbed = new EmbedBuilder()
-                .setColor(0xE67E22)
-                .setTitle('🏆 ĐOÁN TÊN NHÂN VẬT ANIME')
-                .setDescription(`💡 Gợi ý: **${sel.hint}**\n\nNhanh tay chat tên nhân vật vào kênh trong **30 giây** để nhận thưởng **1,000 xu**!`)
-                .setFooter({ text: 'Hệ thống đang chờ câu trả lời từ các thành viên...' });
+        switch (interaction.commandName) {
             
-            await interaction.editReply({ embeds: [startEmbed] });
+            case 'vi': {
+                const embed = createBaseEmbed(
+                    0x2B2D31, 
+                    `💳 TÀI KHOẢN CỦA ${interaction.user.username.toUpperCase()}`, 
+                    `Sở hữu hệ thống kinh tế tối ưu tích hợp Animation!`,
+                    GIFS.wallet,
+                    interaction.user.displayAvatarURL({ dynamic: true, size: 256 })
+                )
+                .addFields(
+                    { name: '💰 Số dư', value: `**${eco.balance.toLocaleString()} xu**`, inline: true },
+                    { name: '🔥 Chuỗi điểm danh', value: `**${eco.streak} ngày**`, inline: true },
+                    { name: '🎣 Cần câu', value: `**${eco.rod.toUpperCase()}**`, inline: true },
+                    { name: '🌱 Diện tích đất', value: `**${eco.plots.length} ô**`, inline: true }
+                )
+                .setFooter({ text: 'Discord Bot Animated System', iconURL: client.user.displayAvatarURL() });
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
 
-            try {
-                const collected = await interaction.channel.awaitMessages({
-                    filter: m => m.content.toLowerCase().includes(sel.name.toLowerCase()) && !m.author.bot,
-                    max: 1,
-                    time: 30000,
-                    errors: ['time']
-                });
-
-                const winnerMsg = collected.first();
-                const winnerId = winnerMsg.author.id;
-                let wEco = userEconomy.get(winnerId) || { balance: 1000, lastDaily: 0, streak: 0, plots: [null, null], rod: 'tre', fishes: [] };
-                wEco.balance += 1000;
-                userEconomy.set(winnerId, wEco);
-
-                const winEmbed = new EmbedBuilder()
-                    .setColor(0x2ECC71)
-                    .setTitle('🎉 ĐOÁN ĐÚNG NHÂN VẬT ANIME!')
-                    .setDescription(`✅ Chính xác! Nhân vật đó là **${sel.name}**.\n\n🏆 Xin chúc mừng <@${winnerId}> đã giành chiến thắng và nhận **1,000 xu**!`);
+            case 'diandanh': {
+                const cooldown = 24 * 60 * 60 * 1000;
+                const timePassed = Date.now() - eco.lastDaily;
+                if (timePassed < cooldown) {
+                    const hoursLeft = Math.ceil((cooldown - timePassed) / 3600000);
+                    return interaction.reply({ embeds: [createBaseEmbed(0xED4245, '⏳ BẠN ĐÃ ĐIỂM DANH RỒI!', `Quay lại sau **${hoursLeft} giờ** nữa để nhận quà tiếp nhé.`, GIFS.daily)], ephemeral: true });
+                }
                 
-                await interaction.channel.send({ embeds: [winEmbed] });
-            } catch (e) {
-                const timeoutEmbed = new EmbedBuilder()
-                    .setColor(0x95A5A6)
-                    .setTitle('⏰ HẾT GIỜ!')
-                    .setDescription(`Không ai đoán đúng đáp án là **${sel.name}** cả.`);
-                await interaction.channel.send({ embeds: [timeoutEmbed] });
+                eco.balance += 500;
+                eco.lastDaily = Date.now();
+                eco.streak += 1;
+                saveUserData(userId, eco);
+                
+                await interaction.reply({ embeds: [createBaseEmbed(0x57F287, '🎁 ĐIỂM DANH THÀNH CÔNG', `Bạn nhận được **+500 xu**.\n🔥 Chuỗi hiện tại: **${eco.streak} ngày**!`, GIFS.daily)] });
+                break;
             }
-        } else if (interaction.commandName === 'dice') {
-            const d1 = Math.floor(Math.random() * 6) + 1;
-            const d2 = Math.floor(Math.random() * 6) + 1;
-            const sum = d1 + d2;
-            const embed = new EmbedBuilder().setColor(0x3498DB).setTitle('🎲 KẾT QUẢ XÍ NGẦU').setDescription(`Xí ngầu ra: **[${d1}]** và **[${d2}]**\nTổng điểm: **${sum}**`);
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'slot') {
-            const amount = interaction.options.getInteger('sotien');
-            if (amount <= 0 || ecoData.balance < amount) {
-                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ Số tiền cược không hợp lệ hoặc vượt quá số dư!')], ephemeral: true });
-                return;
-            }
-            const symbols = ['🍒', '🍋', '🔔', '⭐', '💎'];
-            const s1 = symbols[Math.floor(Math.random() * symbols.length)];
-            const s2 = symbols[Math.floor(Math.random() * symbols.length)];
-            const s3 = symbols[Math.floor(Math.random() * symbols.length)];
-            let mult = 0;
-            if (s1 === s2 && s2 === s3) {
-                mult = s1 === '💎' ? 10 : (s1 === '⭐' ? 7 : 5);
-            } else if (s1 === s2 || s2 === s3 || s1 === s3) {
-                mult = 1.5;
-            }
-            const winAmount = Math.floor(amount * mult);
-            const win = mult > 0;
-            ecoData.balance += win ? winAmount - amount : -amount;
-            userEconomy.set(userId, ecoData);
 
-            const embed = new EmbedBuilder()
-                .setColor(win ? 0x2ECC71 : 0xE74C3C)
-                .setTitle('🎰 QUAY HŨ SLOT MACHINE')
-                .setDescription(`Slot: **[ ${s1} | ${s2} | ${s3} ]**\n\n${win ? `🎉 Trúng lớn hệ số x${mult}! Nhận **+${winAmount.toLocaleString()} xu**` : '😢 Chúc bạn may mắn lần sau, mất trắng cược!'}`);
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'baucua') {
-            const choice = interaction.options.getString('chon');
-            const amount = interaction.options.getInteger('sotien');
-            if (amount <= 0 || ecoData.balance < amount) {
-                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ Không đủ số dư để đặt cược bầu cua!')], ephemeral: true });
-                return;
-            }
-            const icons = { bau: '🌿', cua: '🦀', tom: '🦐', ca: '🐟', ga: '🐓', nai: '🦌' };
-            const keys = Object.keys(icons);
-            const r1 = keys[Math.floor(Math.random() * keys.length)];
-            const r2 = keys[Math.floor(Math.random() * keys.length)];
-            const r3 = keys[Math.floor(Math.random() * keys.length)];
-            const matches = [r1, r2, r3].filter(k => k === choice).length;
-            const reward = matches * amount;
-            const win = matches > 0;
-            ecoData.balance += win ? reward : -amount;
-            userEconomy.set(userId, ecoData);
+            case 'cauca': {
+                let chance = Math.random();
+                let caughtFish;
+                
+                const rodTiers = {
+                    'titan':  [{c: 0.05, f: 10}, {c: 0.15, f: 9}, {c: 0.40, f: 8}, {c: 0.70, f: 7}, {c: 1.0, f: 6}],
+                    'carbon': [{c: 0.05, f: 9},  {c: 0.20, f: 8}, {c: 0.45, f: 6}, {c: 0.75, f: 5}, {c: 1.0, f: 4}],
+                    'tre':    [{c: 0.05, f: 6},  {c: 0.15, f: 4}, {c: 0.40, f: 3}, {c: 0.70, f: 2}, {c: 0.90, f: 1}, {c: 1.0, f: 0}]
+                };
 
-            const embed = new EmbedBuilder()
-                .setColor(win ? 0x2ECC71 : 0xE74C3C)
-                .setTitle('🎲 KẾT QUẢ BẦU CƯA TÔM CÁ')
-                .setDescription(`Kết quả: **[${icons[r1]}] [${icons[r2]}] [${icons[r3]}]**\n\n${win ? `🎉 Trúng ${matches} con! Thưởng **+${reward.toLocaleString()} xu**` : '😢 Không trúng con nào, mất tiền cược!'}`);
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'shop') {
-            const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🛒 CỬA HÀNG HẠT GIỐNG NÔNG TRẠI');
-            currentShopStock.forEach(item => {
-                embed.addFields({
-                    name: `${item.name} (\`${item.id}\`)`,
-                    value: `⭐ Độ hiếm: ${item.rarity} | Giá mua: **${item.cost.toLocaleString()} xu** | Lãi: **${item.profit.toLocaleString()} xu** (${item.duration / 60000} phút) | Kho còn lại: **${item.stock} hạt**`,
-                    inline: false
+                const currentRodLimits = rodTiers[eco.rod] || rodTiers['tre'];
+                for (let tier of currentRodLimits) {
+                    if (chance < tier.c) { caughtFish = FISH_LIST[tier.f]; break; }
+                }
+                
+                eco.fishes.push(caughtFish);
+                eco.balance += caughtFish.price;
+                saveUserData(userId, eco);
+                
+                const isTrash = caughtFish.rarity === 'Trash';
+                const embed = createBaseEmbed(
+                    isTrash ? 0x95A5A6 : 0x3498DB, 
+                    '🎣 KẾT QUẢ CÂU CÁ', 
+                    `Bạn vung cần **${eco.rod.toUpperCase()}** và giật được: **${caughtFish.name}**!\n💰 Đã bán thu về: **+${caughtFish.price.toLocaleString()} xu**`,
+                    GIFS.fishing
+                );
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+
+            case 'slot': {
+                const bet = interaction.options.getInteger('sotien');
+                if (bet <= 0) return interaction.reply({ content: 'Số tiền cược phải lớn hơn 0 bồ ơi!', ephemeral: true });
+                if (eco.balance < bet) return interaction.reply({ content: `Bạn không đủ tiền! Số dư của bạn là: **${eco.balance} xu**.`, ephemeral: true });
+
+                const symbols = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
+                const result = [ symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random() * symbols.length)], symbols[Math.floor(Math.random() * symbols.length)] ];
+
+                let multiplier = 0;
+                if (result[0] === result[1] && result[1] === result[2]) multiplier = 5; 
+                else if (result[0] === result[1] || result[1] === result[2] || result[0] === result[2]) multiplier = 1.5; 
+
+                eco.balance -= bet; 
+                const winnings = Math.floor(bet * multiplier);
+                eco.balance += winnings;
+                saveUserData(userId, eco);
+
+                const embed = createBaseEmbed(
+                    multiplier > 0 ? 0xF1C40F : 0x95A5A6, 
+                    '🎰 SLOT MACHINE ĐANG QUAY... 🎰',
+                    `**[ ${result.join(' | ')} ]**\n\n${multiplier > 0 ? `🎉 Trúng mánh! Bạn nhận được **+${winnings.toLocaleString()} xu**!` : `😢 Mất trắng **${bet.toLocaleString()} xu** rồi bồ tèo.`}`,
+                    GIFS.slot
+                );
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+
+            case 'doananime': {
+                const character = ANIME_LIST[Math.floor(Math.random() * ANIME_LIST.length)];
+                await interaction.reply({ 
+                    embeds: [createBaseEmbed(
+                        0x9B59B6, 
+                        '🧠 MINIGAME WEEBU 100 NHÂN VẬT', 
+                        `**Gợi ý:** ${character.hint}\n\n⏱️ *Bạn có 15 giây để gõ tên nhân vật vào kênh này!*`,
+                        GIFS.anime
+                    )] 
                 });
-            });
-            await interaction.reply({ embeds: [embed] });
-        } else if (interaction.commandName === 'nongtrai') {
-            const sub = interaction.options.getSubcommand();
-            if (sub === 'vuon') {
-                const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🌱 KHU VƯỜN NÔNG TRẠI CỦA ${interaction.user.username}`);
-                ecoData.plots.forEach((p, idx) => {
-                    if (!p) {
-                        embed.addFields({ name: `Ô đất #${idx + 1}`, value: '🟫 Đất trống (Sẵn sàng trồng trọt)', inline: false });
+
+                try {
+                    const collected = await interaction.channel.awaitMessages({ filter: m => m.author.id === userId, max: 1, time: 15000, errors: ['time'] });
+                    const answer = collected.first().content.trim().toLowerCase();
+                    if (answer === character.name.toLowerCase()) {
+                        eco.balance += 300; saveUserData(userId, eco);
+                        await interaction.followUp({ content: `🎉 Chuẩn cmnr! Bổn cung thưởng cho bạn **+300 xu**. (Đáp án: **${character.name}**)` });
                     } else {
-                        const mins = Math.ceil((p.harvestTime - Date.now()) / 60000);
-                        const desc = mins <= 0 ? '✨ Cây đã lớn, có thể thu hoạch ngay!' : `🌿 Đang lớn (~${mins} phút nữa)`;
-                        embed.addFields({ name: `Ô đất #${idx + 1} - ${p.name}`, value: desc, inline: false });
+                        await interaction.followUp({ content: `❌ Sai bét rồi! Đáp án đúng là **${character.name}**.` });
                     }
-                });
-                await interaction.reply({ embeds: [embed] });
-            } else if (sub === 'muadat') {
-                if (ecoData.balance < 2000 || ecoData.plots.length >= 6) {
-                    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ Không đủ 2000 xu hoặc nông trại đã đạt tối đa 6 ô đất!')], ephemeral: true });
-                    return;
+                } catch (e) {
+                    await interaction.followUp({ content: `⏰ Hết 15 giây rồi! Đáp án là **${character.name}**.` });
                 }
-                ecoData.balance -= 2000;
-                ecoData.plots.push(null);
-                userEconomy.set(userId, ecoData);
-                const embed = new EmbedBuilder().setColor(0x00FF00).setTitle('✨ MỞ RỘNG THÀNH CÔNG').setDescription(`Nông trại của bạn giờ đã sở hữu **${ecoData.plots.length} ô đất**.`);
-                await interaction.reply({ embeds: [embed] });
-            } else if (sub === 'trong') {
-                const pidx = interaction.options.getInteger('oodat') - 1;
-                const sid = interaction.options.getString('loaicay').toLowerCase();
-                if (pidx < 0 || pidx >= ecoData.plots.length || ecoData.plots[pidx] !== null) {
-                    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ Ô đất không hợp lệ hoặc đang có cây trồng khác!')], ephemeral: true });
-                    return;
-                }
-                const item = currentShopStock.find(s => s.id === sid);
-                if (!item || item.stock <= 0 || ecoData.balance < item.cost) {
-                    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ Hạt giống không có trong shop, đã hết hàng hoặc bạn không đủ xu!')], ephemeral: true });
-                    return;
-                }
-                item.stock--;
-                ecoData.balance -= item.cost;
-                ecoData.plots[pidx] = { name: item.name, reward: item.profit, harvestTime: Date.now() + item.duration };
-                userEconomy.set(userId, ecoData);
-                const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle('🌱 GIEO TRỒNG THÀNH CÔNG').setDescription(`Đã gieo trồng **${item.name}** vào ô đất #${pidx + 1}! Đợi **${item.duration / 60000} phút** để thu hoạch.`);
-                await interaction.reply({ embeds: [embed] });
-            } else if (sub === 'thuhoach') {
-                const pidx = interaction.options.getInteger('oodat') - 1;
-                if (pidx < 0 || pidx >= ecoData.plots.length || !ecoData.plots[pidx] || Date.now() < ecoData.plots[pidx].harvestTime) {
-                    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ Ô đất đang trống hoặc cây trồng chưa lớn để thu hoạch!')], ephemeral: true });
-                    return;
-                }
-                const p = ecoData.plots[pidx];
-                ecoData.balance += p.reward;
-                ecoData.plots[pidx] = null;
-                userEconomy.set(userId, ecoData);
-                const embed = new EmbedBuilder().setColor(0x00FF00).setTitle('🌾 THU HOẠCH THÀNH CÔNG').setDescription(`Thu hoạch thành công **${p.name}** tại ô đất #${pidx + 1}! Bỏ túi **+${p.reward.toLocaleString()} xu**.`);
-                await interaction.reply({ embeds: [embed] });
+                break;
             }
-        } else if (interaction.commandName === 'cauca') {
-            let chance = Math.random();
-            let caughtFish;
-            if (ecoData.rod === 'titan') {
-                if (chance < 0.3) caughtFish = FISH_LIST[4];
-                else if (chance < 0.6) caughtFish = FISH_LIST[3];
-                else caughtFish = FISH_LIST[2];
-            } else if (ecoData.rod === 'carbon') {
-                if (chance < 0.2) caughtFish = FISH_LIST[3];
-                else if (chance < 0.6) caughtFish = FISH_LIST[2];
-                else caughtFish = FISH_LIST[1];
-            } else {
-                if (chance < 0.5) caughtFish = FISH_LIST[0];
-                else if (chance < 0.8) caughtFish = FISH_LIST[1];
-                else caughtFish = FISH_LIST[2];
+
+            case 'nongtrai': {
+                const sub = interaction.options.getSubcommand();
+                if (sub === 'vuon') {
+                    let desc = '';
+                    eco.plots.forEach((plot, index) => {
+                        if (!plot) desc += `**Ô ${index + 1}:** Đất trống (Vào shop mua hạt giống)\n`;
+                        else {
+                            const timeToGrow = (plot.plantTime + plot.duration) - Date.now();
+                            if (timeToGrow <= 0) desc += `**Ô ${index + 1}:** ${plot.name} (Đã chín! Gõ /nongtrai thuhoach)\n`;
+                            else desc += `**Ô ${index + 1}:** ${plot.name} (Chín sau: ${Math.ceil(timeToGrow / 60000)} phút)\n`;
+                        }
+                    });
+                    await interaction.reply({ embeds: [createBaseEmbed(0x2ECC71, '🧑‍🌾 KHU VƯỜN CỦA BẠN', desc, GIFS.farm)] });
+                } else if (sub === 'thuhoach') {
+                    const plotIndex = interaction.options.getInteger('oodat') - 1; 
+                    if (plotIndex < 0 || plotIndex >= eco.plots.length) return interaction.reply({ content: 'Ô đất không tồn tại!', ephemeral: true });
+                    const plot = eco.plots[plotIndex];
+                    if (!plot) return interaction.reply({ content: 'Ô này đang bỏ hoang!', ephemeral: true });
+                    if (Date.now() < plot.plantTime + plot.duration) return interaction.reply({ content: 'Cây chưa chín bồ ơi, định ăn trái non à?', ephemeral: true });
+                    
+                    eco.balance += plot.profit;
+                    const profitText = plot.profit;
+                    const plantName = plot.name;
+                    eco.plots[plotIndex] = null; 
+                    saveUserData(userId, eco);
+                    await interaction.reply({ embeds: [createBaseEmbed(0xF1C40F, '🌾 THU HOẠCH THÀNH CÔNG', `Bạn thu hoạch **${plantName}** và bán vội được **+${profitText.toLocaleString()} xu**!`, GIFS.farm)] });
+                }
+                break;
             }
-            ecoData.fishes.push(caughtFish);
-            ecoData.balance += caughtFish.price;
+
+            case 'ai': {
+                if (interaction.options.getSubcommand() === 'on') {
+                    enableChannel(interaction.channelId);
+                    await interaction.reply({ embeds: [createBaseEmbed(0x57F287, '🤖 AI ONLINE', 'Đã bật AI mỏ hỗn lầy lội. Sẵn sàng trò chuyện!', GIFS.ai_on)] });
+                } else {
+                    disableChannel(interaction.channelId);
+                    await interaction.reply({ embeds: [createBaseEmbed(0xED4245, '💤 AI OFFLINE', 'Đã tắt AI và dọn dẹp bộ nhớ tạm.', GIFS.ai_off)] });
+                }
+                break;
+            }
+        }
+    } catch (e) {
+        logger.warn(e, `Lỗi lệnh ${interaction.commandName}`);
+        if (!interaction.replied) await interaction.reply({ content: 'Oops, hệ thống gặp chút sự cố nhỏ!', ephemeral: true });
+    }
+});
 client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
+    
     if (isChannelEnabled(message.channelId)) {
         await message.channel.sendTyping();
-        const history = [{ role: 'user', content: message.content }];
+        
+        if (!chatHistories.has(message.channelId)) chatHistories.set(message.channelId, []);
+        const history = chatHistories.get(message.channelId);
+        
+        // Đưa Tên người dùng vào ngữ cảnh để AI xưng hô siêu tự nhiên
+        history.push({ role: 'user', content: `[Thành viên: ${message.author.username}] nói: ${message.content}` });
+        
+        // Giữ 8 câu gần nhất để nhớ dai hơn
+        if (history.length > 8) history.shift();
+        
         const reply = await callNvidiaAI(history);
+        
+        history.push({ role: 'assistant', content: reply });
+        if (history.length > 8) history.shift();
+        
         await message.reply(reply);
     }
 });
 
 client.once('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+    console.log(`🤖 Bot Discord Thông Minh [${client.user.tag}] đã online!`);
+    client.user.setActivity('chat cùng bạn (/ai on)', { type: 3 }); 
+
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('Successfully registered application commands.');
+        console.log('✅ Đã nạp thành công bộ lệnh Slash Commands & 100 Anime!');
     } catch (e) {
-        console.error(e);
+        console.error('❌ Lỗi nạp lệnh:', e);
     }
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
-                   userEconomy.set(userId,      
